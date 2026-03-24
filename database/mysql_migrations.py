@@ -5,7 +5,7 @@ from astrbot import logger
 class MigrationManager:
     def __init__(self, pool: aiomysql.Pool):
         self.pool = pool
-        self.target_version = 3 # 当前代码支持的最高版本
+        self.target_version = 4 # 当前代码支持的最高版本
 
     async def get_current_version(self) -> int:
         async with self.pool.acquire() as conn:
@@ -123,3 +123,14 @@ class MigrationManager:
         await cursor.execute("SHOW COLUMNS FROM image_assets LIKE 'file_path'")
         if await cursor.fetchone():
              await cursor.execute("ALTER TABLE image_assets DROP COLUMN file_path")
+
+    async def _migration_v4(self, cursor):
+        """添加多群组检索的联合索引以提升百万级别海量聊天记录拉取性能"""
+        # MySQL 不支持 CREATE INDEX IF NOT EXISTS，先查询
+        await cursor.execute("SHOW INDEX FROM messages WHERE Key_name = 'idx_group_time'")
+        if not await cursor.fetchone():
+            await cursor.execute("CREATE INDEX idx_group_time ON messages (platform_type, group_id, timestamp)")
+            
+        await cursor.execute("SHOW INDEX FROM messages WHERE Key_name = 'idx_session_time'")
+        if not await cursor.fetchone():
+            await cursor.execute("CREATE INDEX idx_session_time ON messages (session_id, timestamp)")

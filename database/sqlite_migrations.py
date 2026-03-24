@@ -5,7 +5,7 @@ from astrbot import logger
 class SQLiteMigrationManager:
     def __init__(self, conn: aiosqlite.Connection):
         self.conn = conn
-        self.target_version = 3 # 当前代码支持的最高版本
+        self.target_version = 4 # 当前代码支持的最高版本
 
     async def get_current_version(self) -> int:
         async with self.conn.cursor() as cursor:
@@ -138,3 +138,8 @@ class SQLiteMigrationManager:
                 """)
                 await cursor.execute("DROP TABLE image_assets")
                 await cursor.execute("ALTER TABLE image_assets_new RENAME TO image_assets")
+
+    async def _migration_v4(self, cursor):
+        """添加多群组检索的联合索引以提升百万级别海量聊天记录拉取性能"""
+        await cursor.execute("CREATE INDEX IF NOT EXISTS idx_group_time ON messages (platform_type, group_id, timestamp)")
+        await cursor.execute("CREATE INDEX IF NOT EXISTS idx_session_time ON messages (session_id, timestamp)")
