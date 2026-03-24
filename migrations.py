@@ -43,7 +43,8 @@ class MigrationManager:
                     if version > 1: # v1 是初始建表，无需备份
                         tables_to_backup = ["image_assets", "messages"]
                         for table in tables_to_backup:
-                            backup_name = f"{table}_bak_v{version-1}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
+                            timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
+                            backup_name = f"{table}_v{version-1}_{timestamp}_bak"
                             logger.info(f"正在备份表 {table} 至 {backup_name}...")
                             await cursor.execute(f"CREATE TABLE {backup_name} SELECT * FROM {table}")
 
