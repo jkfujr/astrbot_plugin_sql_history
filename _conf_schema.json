@@ -33,5 +33,16 @@
     "description": "图片存储路径",
     "type": "string",
     "default": "data/plugins/astrbot_plugin_sql_history/image"
+  },
+  "db_type": {
+    "description": "数据库类型",
+    "type": "string",
+    "default": "mysql",
+    "keys": ["mysql", "sqlite"]
+  },
+  "sqlite_db_path": {
+    "description": "SQLite数据库存储路径",
+    "type": "string",
+    "default": "data/plugins/astrbot_plugin_sql_history/history.db"
   }
 }
