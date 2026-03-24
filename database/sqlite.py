@@ -5,6 +5,7 @@ import os
 from astrbot import logger
 from typing import Optional
 from .base import BaseStorage
+from .sqlite_migrations import SQLiteMigrationManager
 
 class SQLiteStorage(BaseStorage):
     def __init__(self, db_path: str):
@@ -16,51 +17,13 @@ class SQLiteStorage(BaseStorage):
             # 确保目录存在
             os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
             self.conn = await aiosqlite.connect(self.db_path)
-            # SQLite 初始化建表
-            await self._init_tables()
+            
+            # 使用 SQLite 迁移管理器进行表结构初始化和升级
+            migration_mgr = SQLiteMigrationManager(self.conn)
+            await migration_mgr.upgrade_to_latest()
         except Exception as e:
             logger.error(f"SQLite连接或初始化失败: {str(e)}")
             raise
-
-    async def _init_tables(self):
-        async with self.conn.cursor() as cursor:
-            # 创建版本追踪表（虽然 SQLite 这里没做严格的管理，但保留兼容语义）
-            await cursor.execute("""
-                CREATE TABLE IF NOT EXISTS plugin_schema_version (
-                    version    INTEGER PRIMARY KEY,
-                    applied_at DATETIME NOT NULL
-                )
-            """)
-            
-            # 创建图片资源表
-            await cursor.execute("""
-                CREATE TABLE IF NOT EXISTS image_assets (
-                    image_hash   VARCHAR(64) PRIMARY KEY,
-                    file_ext     VARCHAR(10),
-                    file_path    TEXT NOT NULL,
-                    file_size    INTEGER,
-                    created_time DATETIME NOT NULL
-                )
-            """)
-
-            # 创建消息表
-            await cursor.execute("""
-                CREATE TABLE IF NOT EXISTS messages (
-                    message_id    VARCHAR(255) PRIMARY KEY,
-                    platform_type VARCHAR(50)  NOT NULL,
-                    self_id       VARCHAR(255) NOT NULL,
-                    session_id    VARCHAR(255) NOT NULL,
-                    group_id      VARCHAR(255),
-                    sender        JSON         NOT NULL,
-                    message_str   TEXT         NOT NULL,
-                    raw_message   TEXT,
-                    image_ids     JSON,
-                    timestamp     INTEGER      NOT NULL,
-                    created_time  DATETIME     NOT NULL
-                )
-            """)
-            await self.conn.commit()
-
     async def terminate(self) -> None:
         if self.conn:
             await self.conn.close()
@@ -74,15 +37,14 @@ class SQLiteStorage(BaseStorage):
             result = await cursor.fetchone()
             return bool(result)
 
-    async def save_image_record(self, image_hash: str, file_ext: str, file_path: str, file_size: int) -> None:
+    async def save_image_record(self, image_hash: str, file_ext: str, file_size: int) -> None:
         async with self.conn.cursor() as cursor:
             await cursor.execute("""
-                INSERT INTO image_assets (image_hash, file_ext, file_path, file_size, created_time)
-                VALUES (?, ?, ?, ?, ?)
+                INSERT INTO image_assets (image_hash, file_ext, file_size, created_time)
+                VALUES (?, ?, ?, ?)
             """, (
                 image_hash,
                 file_ext,
-                file_path,
                 file_size,
                 datetime.datetime.now()
             ))

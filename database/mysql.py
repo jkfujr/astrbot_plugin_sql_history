@@ -50,16 +50,15 @@ class MySQLStorage(BaseStorage):
                 result = await cursor.fetchone()
                 return bool(result)
 
-    async def save_image_record(self, image_hash: str, file_ext: str, file_path: str, file_size: int) -> None:
+    async def save_image_record(self, image_hash: str, file_ext: str, file_size: int) -> None:
         async with self.pool.acquire() as conn:
             async with conn.cursor() as cursor:
                 await cursor.execute("""
-                    INSERT INTO image_assets (image_hash, file_ext, file_path, file_size, created_time)
-                    VALUES (%s, %s, %s, %s, %s)
+                    INSERT INTO image_assets (image_hash, file_ext, file_size, created_time)
+                    VALUES (%s, %s, %s, %s)
                 """, (
                     image_hash,
                     file_ext,
-                    file_path,
                     file_size,
                     datetime.datetime.now()
                 ))

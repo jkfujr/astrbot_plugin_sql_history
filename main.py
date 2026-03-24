@@ -14,7 +14,7 @@ from typing import Optional
 from .database import MySQLStorage, SQLiteStorage, BaseStorage
 
 
-@register("astrbot_plugin_sql_history", "LW", "MySQL日志(Hash去重版)", "1.1.0")
+@register("astrbot_plugin_sql_history", "LW&jkfujr", "MySQL日志(Hash去重版)", "1.1.0")
 class MySQLPlugin(Star):
     def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context)
@@ -27,7 +27,7 @@ class MySQLPlugin(Star):
 
         # 图片保存路径
         self.is_save_image = img_conf.get("is_save_image", False)
-        self.image_save_path = img_conf.get("image_save_path", "data/plugins/astrbot_plugin_sql_history/image") or "data/plugins/astrbot_plugin_sql_history/image"
+        self.image_save_path = img_conf.get("image_save_path", "data/plugin_data/astrbot_plugin_sql_history/image") or "data/plugin_data/astrbot_plugin_sql_history/image"
         if self.is_save_image and not os.path.exists(self.image_save_path):
             os.makedirs(self.image_save_path)
 
@@ -55,7 +55,7 @@ class MySQLPlugin(Star):
                     password=password
                 )
             elif db_type == "sqlite":
-                db_path = db_conf.get("sqlite_db_path", "data/plugins/astrbot_plugin_sql_history/history.db")
+                db_path = db_conf.get("sqlite_db_path", "data/plugin_data/astrbot_plugin_sql_history/sqlite/data_v1.db")
                 self.storage = SQLiteStorage(db_path=db_path)
             else:
                 logger.error(f"不支持的数据库类型: {db_type}")
@@ -116,11 +116,10 @@ class MySQLPlugin(Star):
                 async with aiofiles.open(save_path, mode='wb') as f:
                     await f.write(img_data)
 
-                # 写入 image_assets 表 (同时存储 file_path 以保持兼容，后续版本可移除)
+                # 写入 image_assets 表
                 await self.storage.save_image_record(
                     image_hash=sha256_hash,
                     file_ext=file_ext,
-                    file_path=abs_path,
                     file_size=len(img_data)
                 )
 

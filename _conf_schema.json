@@ -17,7 +17,7 @@
       "sqlite_db_path": {
         "description": "[SQLite] 数据库存储路径",
         "type": "string",
-        "default": "data/plugins/astrbot_plugin_sql_history/data/sqlite/data_v1.db",
+        "default": "data/plugin_data/astrbot_plugin_sql_history/sqlite/data_v1.db",
         "hint": "SQLite 数据库文件的具体保存位置"
       },
       "host": {
@@ -58,8 +58,8 @@
       "image_save_path": {
         "description": "图片归档总目录",
         "type": "string",
-        "default": "data/plugins/astrbot_plugin_sql_history/data/image",
-        "hint": "建议存放在 data 目录下防止丢失，插件将会自动基于此目录创建并持久化文件"
+        "default": "data/plugin_data/astrbot_plugin_sql_history/image",
+        "hint": "建议存放在 data/plugin_data 目录下防止丢失，插件将会自动基于此目录创建并持久化文件"
       }
     }
   }

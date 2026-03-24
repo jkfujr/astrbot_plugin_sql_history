@@ -5,7 +5,7 @@ from astrbot import logger
 class MigrationManager:
     def __init__(self, pool: aiomysql.Pool):
         self.pool = pool
-        self.target_version = 2 # 当前代码支持的最高版本
+        self.target_version = 3 # 当前代码支持的最高版本
 
     async def get_current_version(self) -> int:
         async with self.pool.acquire() as conn:
@@ -117,3 +117,9 @@ class MigrationManager:
         
         # 3. 如果依然有 NULL（比如文件没后缀），设置默认值
         await cursor.execute("UPDATE image_assets SET file_ext = '.jpg' WHERE file_ext IS NULL")
+
+    async def _migration_v3(self, cursor):
+        """彻底移除遗留的 file_path 字段以解耦绝对路径"""
+        await cursor.execute("SHOW COLUMNS FROM image_assets LIKE 'file_path'")
+        if await cursor.fetchone():
+             await cursor.execute("ALTER TABLE image_assets DROP COLUMN file_path")

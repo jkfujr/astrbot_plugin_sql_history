@@ -18,7 +18,7 @@ class BaseStorage(abc.ABC):
         pass
 
     @abc.abstractmethod
-    async def save_image_record(self, image_hash: str, file_ext: str, file_path: str, file_size: int) -> None:
+    async def save_image_record(self, image_hash: str, file_ext: str, file_size: int) -> None:
         """保存图片记录至数据库"""
         pass
 
