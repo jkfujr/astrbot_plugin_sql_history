@@ -24,7 +24,7 @@ class MySQLPlugin(Star):
 
         # 图片保存路径
         self.is_save_image = self.config.get("is_save_image", False)
-        self.image_save_path = self.config.get("image_save_path", "./data/chat_images") or "./data/chat_images"
+        self.image_save_path = self.config.get("image_save_path", "data/plugins/astrbot_plugin_sql_history/image") or "data/plugins/astrbot_plugin_sql_history/image"
         if self.is_save_image and not os.path.exists(self.image_save_path):
             os.makedirs(self.image_save_path)
 

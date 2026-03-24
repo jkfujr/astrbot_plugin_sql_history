@@ -31,6 +31,7 @@
   },
   "image_save_path": {
     "description": "图片存储路径",
-    "type": "string"
+    "type": "string",
+    "default": "data/plugins/astrbot_plugin_sql_history/image"
   }
 }
