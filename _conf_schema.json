@@ -1,48 +1,66 @@
 {
-  "host": {
-    "description": "host",
-    "type": "string",
-    "hint": "必填"
-  },
-  "port": {
-    "description": "port",
-    "type": "int",
-    "hint": "必填"
-  },
   "database": {
-    "description": "db",
-    "type": "string",
-    "hint": "必填"
+    "description": "数据库与存储机制",
+    "type": "object",
+    "hint": "选择历史消息使用的底层数据库类型并配置其连接参数",
+    "items": {
+      "db_type": {
+        "description": "数据库类型",
+        "type": "string",
+        "default": "sqlite",
+        "keys": [
+          "sqlite",
+          "mysql"
+        ],
+        "hint": "推荐使用开箱即用的 SQLite。如果有性能或集群需求，可选择配置 MySQL"
+      },
+      "sqlite_db_path": {
+        "description": "[SQLite] 数据库存储路径",
+        "type": "string",
+        "default": "data/plugins/astrbot_plugin_sql_history/data/sqlite/data_v1.db",
+        "hint": "SQLite 数据库文件的具体保存位置"
+      },
+      "host": {
+        "description": "[MySQL] 主机地址",
+        "type": "string",
+        "hint": "MySQL服务器地址，如 127.0.0.1"
+      },
+      "port": {
+        "description": "[MySQL] 端口号",
+        "type": "int",
+        "default": 3306
+      },
+      "database": {
+        "description": "[MySQL] 数据库名",
+        "type": "string"
+      },
+      "username": {
+        "description": "[MySQL] 用户名",
+        "type": "string"
+      },
+      "password": {
+        "description": "[MySQL] 密码",
+        "type": "string"
+      }
+    }
   },
-  "username": {
-    "description": "username",
-    "type": "string",
-    "hint": "必填"
-  },
-  "password": {
-    "description": "password",
-    "type": "string",
-    "hint": "必填"
-  },
-  "is_save_image": {
-    "description": "是否开启存储图片（需要占用大量磁盘）",
-    "type": "bool",
-    "hint": "必填"
-  },
-  "image_save_path": {
-    "description": "图片存储路径",
-    "type": "string",
-    "default": "data/plugins/astrbot_plugin_sql_history/image"
-  },
-  "db_type": {
-    "description": "数据库类型",
-    "type": "string",
-    "default": "mysql",
-    "keys": ["mysql", "sqlite"]
-  },
-  "sqlite_db_path": {
-    "description": "SQLite数据库存储路径",
-    "type": "string",
-    "default": "data/plugins/astrbot_plugin_sql_history/history.db"
+  "image": {
+    "description": "图片资源设置",
+    "type": "object",
+    "hint": "开启后，所有的聊天图片将被下载并落盘备份。注意：这会占用极其庞大的磁盘存储空间",
+    "items": {
+      "is_save_image": {
+        "description": "开启图片本地持久化",
+        "type": "bool",
+        "default": false,
+        "hint": "是否将聊天图片缓存至硬盘长期保存"
+      },
+      "image_save_path": {
+        "description": "图片归档总目录",
+        "type": "string",
+        "default": "data/plugins/astrbot_plugin_sql_history/data/image",
+        "hint": "建议存放在 data 目录下防止丢失，插件将会自动基于此目录创建并持久化文件"
+      }
+    }
   }
 }

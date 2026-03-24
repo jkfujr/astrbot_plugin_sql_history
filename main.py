@@ -21,35 +21,41 @@ class MySQLPlugin(Star):
         self.config = config
         self.storage: Optional[BaseStorage] = None
 
+        # 读取分类配置
+        db_conf = self.config.get("database", {})
+        img_conf = self.config.get("image", {})
+
         # 图片保存路径
-        self.is_save_image = self.config.get("is_save_image", False)
-        self.image_save_path = self.config.get("image_save_path", "data/plugins/astrbot_plugin_sql_history/image") or "data/plugins/astrbot_plugin_sql_history/image"
+        self.is_save_image = img_conf.get("is_save_image", False)
+        self.image_save_path = img_conf.get("image_save_path", "data/plugins/astrbot_plugin_sql_history/image") or "data/plugins/astrbot_plugin_sql_history/image"
         if self.is_save_image and not os.path.exists(self.image_save_path):
             os.makedirs(self.image_save_path)
 
     async def initialize(self):
         logger.info("正在初始化 astrbot_plugin_sql_history 插件...")
-        db_type = self.config.get("db_type", "mysql")
+        
+        db_conf = self.config.get("database", {})
+        db_type = db_conf.get("db_type", "sqlite")
 
         try:
             if db_type == "mysql":
-                host = self.config.get("host")
-                database = self.config.get("database")
-                username = self.config.get("username")
-                password = self.config.get("password")
+                host = db_conf.get("host")
+                database = db_conf.get("database")
+                username = db_conf.get("username")
+                password = db_conf.get("password")
                 
                 if not all([host, database, username, password]):
-                    logger.error("MySQL 连接配置不完整，请在插件管理面板填写 host, database, username 和 password。")
+                    logger.info("MySQL 尚未配置。若需启用数据库日志，请在插件面板填写连接信息。")
                     return
                 self.storage = MySQLStorage(
                     host=host,
-                    port=self.config.get("port", 3306),
+                    port=db_conf.get("port", 3306),
                     database=database,
                     username=username,
                     password=password
                 )
             elif db_type == "sqlite":
-                db_path = self.config.get("sqlite_db_path", "data/plugins/astrbot_plugin_sql_history/history.db")
+                db_path = db_conf.get("sqlite_db_path", "data/plugins/astrbot_plugin_sql_history/history.db")
                 self.storage = SQLiteStorage(db_path=db_path)
             else:
                 logger.error(f"不支持的数据库类型: {db_type}")
