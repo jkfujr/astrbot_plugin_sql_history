@@ -29,13 +29,22 @@ class MySQLPlugin(Star):
             os.makedirs(self.image_save_path)
 
     async def initialize(self):
+        host = self.config.get("host")
+        database = self.config.get("database")
+        username = self.config.get("username")
+        password = self.config.get("password")
+
+        if not all([host, database, username, password]):
+            logger.error("MySQL 连接配置不完整，请在插件管理面板填写 host, database, username 和 password。")
+            return
+
         try:
             self.pool = await aiomysql.create_pool(
-                host=self.config.get("host"),
+                host=host,
                 port=self.config.get("port", 3306),
-                user=self.config.get("username"),
-                password=self.config.get("password"),
-                db=self.config.get("database"),
+                user=username,
+                password=password,
+                db=database,
                 autocommit=True,
                 minsize=1,
                 maxsize=5
