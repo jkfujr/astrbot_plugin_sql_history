@@ -1,4 +1,4 @@
-name: mysql_logger
+name: astrbot_plugin_sql_history
 desc: MySQL存储聊天记录,群史官
 version: v1.1.0
 author: LW

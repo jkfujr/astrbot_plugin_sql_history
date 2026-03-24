@@ -15,7 +15,7 @@ from typing import Optional
 from .migrations import MigrationManager
 
 
-@register("mysql_logger", "LW", "MySQL日志(Hash去重版)", "1.1.0")
+@register("astrbot_plugin_sql_history", "LW", "MySQL日志(Hash去重版)", "1.1.0")
 class MySQLPlugin(Star):
     def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context)
