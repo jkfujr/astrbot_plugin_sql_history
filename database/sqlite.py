@@ -31,7 +31,7 @@ class SQLiteStorage(BaseStorage):
     async def check_image_exists(self, sha256_hash: str) -> bool:
         async with self.conn.cursor() as cursor:
             await cursor.execute(
-                "SELECT file_path FROM image_assets WHERE image_hash = ?",
+                "SELECT 1 FROM image_assets WHERE image_hash = ?",
                 (sha256_hash,)
             )
             result = await cursor.fetchone()

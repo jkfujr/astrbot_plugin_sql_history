@@ -44,7 +44,7 @@ class MySQLStorage(BaseStorage):
         async with self.pool.acquire() as conn:
             async with conn.cursor() as cursor:
                 await cursor.execute(
-                    "SELECT file_path FROM image_assets WHERE image_hash = %s",
+                    "SELECT 1 FROM image_assets WHERE image_hash = %s",
                     (sha256_hash,)
                 )
                 result = await cursor.fetchone()
