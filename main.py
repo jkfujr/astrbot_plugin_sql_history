@@ -12,6 +12,7 @@ import hashlib
 import datetime
 from pathlib import Path
 from typing import Optional
+from .migrations import MigrationManager
 
 
 @register("mysql_logger", "LW", "MySQL日志(Hash去重版)", "1.1.0")
@@ -40,36 +41,10 @@ class MySQLPlugin(Star):
                 maxsize=5
             )
 
-            async with self.pool.acquire() as conn:
-                async with conn.cursor() as cursor:
-                    # 1. 创建图片资源表 (存放 Hash -> 本地路径)
-                    await cursor.execute("""
-                                         CREATE TABLE IF NOT EXISTS image_assets
-                                         (
-                                             image_hash   VARCHAR(64) PRIMARY KEY,
-                                             file_path    TEXT     NOT NULL,
-                                             file_size    INT,
-                                             created_time DATETIME NOT NULL
-                                         )
-                                         """)
+            # 使用迁移管理器进行数据库初始化和升级
+            migration_mgr = MigrationManager(self.pool)
+            await migration_mgr.upgrade_to_latest()
 
-                    # 2. 创建消息表 (修改 image_paths 为 image_ids 以存放关联ID)
-                    await cursor.execute("""
-                                         CREATE TABLE IF NOT EXISTS messages
-                                         (
-                                             message_id    VARCHAR(255) PRIMARY KEY,
-                                             platform_type VARCHAR(50)  NOT NULL,
-                                             self_id       VARCHAR(255) NOT NULL,
-                                             session_id    VARCHAR(255) NOT NULL,
-                                             group_id      VARCHAR(255),
-                                             sender        JSON         NOT NULL,
-                                             message_str   TEXT         NOT NULL,
-                                             raw_message   LONGTEXT,
-                                             image_ids     JSON,
-                                             timestamp     INT          NOT NULL,
-                                             created_time  DATETIME     NOT NULL
-                                         )
-                                         """)
         except Exception as e:
             logger.error(f"插件初始化失败: {str(e)}")
             raise
@@ -119,7 +94,7 @@ class MySQLPlugin(Star):
                         elif img_data[:4].startswith(b'RIFF') and img_data[8:12] == b'WEBP':
                             file_ext = ".webp"
 
-                        # 使用 Hash 作为文件名一部分，避免文件名冲突，也方便管理
+                        # 使用 Hash 作为文件名
                         file_name = f"{sha256_hash}{file_ext}"
                         save_path = Path(self.image_save_path) / file_name
                         abs_path = str(save_path.absolute())
@@ -128,12 +103,13 @@ class MySQLPlugin(Star):
                         async with aiofiles.open(save_path, mode='wb') as f:
                             await f.write(img_data)
 
-                        # 写入 image_assets 表
+                        # 写入 image_assets 表 (同时存储 file_path 以保持兼容，后续版本可移除)
                         await cursor.execute("""
-                                             INSERT INTO image_assets (image_hash, file_path, file_size, created_time)
-                                             VALUES (%s, %s, %s, %s)
+                                             INSERT INTO image_assets (image_hash, file_ext, file_path, file_size, created_time)
+                                             VALUES (%s, %s, %s, %s, %s)
                                              """, (
                                                  sha256_hash,
+                                                 file_ext,
                                                  abs_path,
                                                  len(img_data),
                                                  datetime.datetime.now()
