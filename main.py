@@ -29,6 +29,8 @@ class MySQLPlugin(Star):
             os.makedirs(self.image_save_path)
 
     async def initialize(self):
+        logger.info("正在初始化 astrbot_plugin_sql_history 插件...")
+
         host = self.config.get("host")
         database = self.config.get("database")
         username = self.config.get("username")
