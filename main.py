@@ -124,6 +124,9 @@ class MySQLPlugin(Star):
         params['autoRetry'] = 'true'
         params['returnFormat'] = 'full' if self.cf_return_full_url else 'default'
 
+        if self.debug_log:
+            logger.debug(f"CF上传最终请求参数: {params}")
+
         # 文件名
         file_name = f"{sha256_hash}{file_ext}"
 
