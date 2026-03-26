@@ -193,28 +193,45 @@ class MySQLPlugin(Star):
                         if self.debug_log:
                             logger.debug(f"从 result.data 提取渠道列表，数据类型: {type(channels_data)}")
 
-                    if not isinstance(channels_data, list):
-                        logger.error(f"渠道列表返回格式错误，期望 list，实际得到 {type(channels_data)}，内容: {str(channels_data)[:500]}")
+                    available = []
+                    if isinstance(channels_data, dict):
+                        # CloudFlare ImgBed 实际返回格式: 按类型分组的字典
+                        # { 'telegram': [{'name': 'xxx', 'type': 'TelegramNew'}], 's3': [...], ... }
+                        if self.debug_log:
+                            logger.debug(f"检测到分组字典格式，共 {len(channels_data)} 个类型分组")
+                        for channel_type, channel_list in channels_data.items():
+                            if isinstance(channel_list, list):
+                                for channel in channel_list:
+                                    if isinstance(channel, dict):
+                                        if channel.get('enabled', True):
+                                            name = channel.get('name')
+                                            if name:
+                                                available.append(name if isinstance(name, str) else str(name))
+                                                if self.debug_log:
+                                                    logger.debug(f"添加渠道: {name} (类型: {channel_type})")
+                    elif isinstance(channels_data, list):
+                        # 直接是列表格式
+                        if self.debug_log:
+                            logger.debug(f"检测到直接列表格式，共 {len(channels_data)} 个渠道")
+                        for idx, channel in enumerate(channels_data):
+                            if isinstance(channel, str):
+                                # 直接是字符串列表: ["telegram", "cfr2", ...]
+                                available.append(channel)
+                            elif isinstance(channel, dict):
+                                # 对象格式: {"name": "telegram", "enabled": true}
+                                if channel.get('enabled', True):
+                                    name = channel.get('name') or channel.get('channelName') or channel.get('type')
+                                    if name:
+                                        available.append(name if isinstance(name, str) else str(name))
+                            else:
+                                if self.debug_log:
+                                    logger.debug(f"跳过第 {idx} 个渠道，类型不支持: {type(channel)}")
+                    else:
+                        logger.error(f"渠道列表返回格式错误，期望 dict 或 list，实际得到 {type(channels_data)}，内容: {str(channels_data)[:500]}")
                         return
 
-                    # 提取可用渠道名称
-                    # 兼容多种 API 返回格式
-                    available = []
-                    for idx, channel in enumerate(channels_data):
-                        if isinstance(channel, str):
-                            # 直接是字符串列表: ["telegram", "cfr2", ...]
-                            available.append(channel)
-                        elif isinstance(channel, dict):
-                            # 对象格式: {"name": "telegram", "enabled": true}
-                            if channel.get('enabled', True):
-                                name = channel.get('name') or channel.get('channelName') or channel.get('type')
-                                if name:
-                                    available.append(name if isinstance(name, str) else str(name))
-                        else:
-                            logger.debug(f"跳过第 {idx} 个渠道，类型不支持: {type(channel)}")
-
                     if self.debug_log:
-                        logger.debug(f"解析完成，共得到 {len(available)} 个渠道: {available}")
+                        logger.debug(f"解析完成，共得到 {len(available)} 个可用渠道: {available}")
 
                     if available:
                         self._available_channels = available
