@@ -179,20 +179,38 @@ class MySQLPlugin(Star):
                         return
 
                     result = await resp.json()
-                    if not result or not isinstance(result, list):
-                        logger.error("渠道列表返回格式错误")
+                    if not result:
+                        logger.error(f"渠道列表返回为空，实际内容: {result}")
+                        return
+
+                    # 兼容多种可能的返回格式
+                    channels_data = result
+                    if isinstance(result, dict) and result.get('data'):
+                        # 有些 API 会包装在 data 字段里
+                        channels_data = result.get('data')
+                        logger.debug(f"从 result.data 提取渠道列表，数据类型: {type(channels_data)}")
+
+                    if not isinstance(channels_data, list):
+                        logger.error(f"渠道列表返回格式错误，期望 list，实际得到 {type(channels_data)}，内容: {str(channels_data)[:500]}")
                         return
 
                     # 提取可用渠道名称
-                    # API 返回格式示例: [{"name": "telegram", "enabled": true}, ...]
+                    # 兼容多种 API 返回格式
                     available = []
-                    for channel in result:
-                        if isinstance(channel, dict):
-                            # 不同 API 返回格式可能有差异，兼容几种常见格式
+                    for idx, channel in enumerate(channels_data):
+                        if isinstance(channel, str):
+                            # 直接是字符串列表: ["telegram", "cfr2", ...]
+                            available.append(channel)
+                        elif isinstance(channel, dict):
+                            # 对象格式: {"name": "telegram", "enabled": true}
                             if channel.get('enabled', True):
-                                name = channel.get('name') or channel.get('channelName')
+                                name = channel.get('name') or channel.get('channelName') or channel.get('type')
                                 if name:
-                                    available.append(name)
+                                    available.append(name if isinstance(name, str) else str(name))
+                        else:
+                            logger.debug(f"跳过第 {idx} 个渠道，类型不支持: {type(channel)}")
+
+                    logger.debug(f"解析完成，共得到 {len(available)} 个渠道: {available}")
 
                     if available:
                         self._available_channels = available
