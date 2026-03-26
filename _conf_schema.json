@@ -133,6 +133,12 @@
         "type": "bool",
         "default": true,
         "hint": "是否返回完整的图片URL（否则只返回路径部分）"
+      },
+      "cf_upload_folder": {
+        "description": "[CloudFlare] 上传目录",
+        "type": "string",
+        "default": "QQ",
+        "hint": "上传到图床的哪个目录，使用相对路径，例如 QQ、images/chat。留空表示上传到根目录"
       }
     }
   }

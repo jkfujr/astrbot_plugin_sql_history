@@ -40,6 +40,7 @@ class MySQLPlugin(Star):
         self.cf_upload_channel = img_conf.get("cf_upload_channel", "telegram")
         self.cf_server_compress = img_conf.get("cf_server_compress", True)
         self.cf_return_full_url = img_conf.get("cf_return_full_url", True)
+        self.cf_upload_folder = img_conf.get("cf_upload_folder", "QQ")
 
         # 自动渠道轮询相关
         self._available_channels: list[str] = []
@@ -115,6 +116,9 @@ class MySQLPlugin(Star):
             logger.debug(f"轮询选择渠道: {upload_channel}")
         else:
             params['uploadChannel'] = self.cf_upload_channel
+        # 添加上传目录
+        if self.cf_upload_folder and self.cf_upload_folder.strip():
+            params['uploadFolder'] = self.cf_upload_folder.strip()
         params['autoRetry'] = 'true'
         params['returnFormat'] = 'full' if self.cf_return_full_url else 'default'
 
