@@ -254,8 +254,12 @@ class MySQLPlugin(Star):
             return self.cf_upload_channel
 
         # Round-robin 轮询
-        channel = self._available_channels[self._round_robin_index]
+        current_index = self._round_robin_index
+        channel = self._available_channels[current_index]
         self._round_robin_index = (self._round_robin_index + 1) % len(self._available_channels)
+        logger.info(f"CF轮询渠道: 当前索引={current_index}, 选中=[{channel}], 下一个索引={self._round_robin_index}, 总渠道数={len(self._available_channels)}")
+        if self.debug_log:
+            logger.debug(f"所有可用渠道: {self._available_channels}")
         return channel
 
     async def _process_image(self, url: str) -> Optional[str]:

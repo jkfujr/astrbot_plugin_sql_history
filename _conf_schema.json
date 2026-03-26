@@ -8,7 +8,7 @@
         "description": "数据库类型",
         "type": "string",
         "default": "sqlite",
-        "keys": [
+        "options": [
           "sqlite",
           "mysql"
         ],
@@ -65,7 +65,7 @@
         "description": "图像存储模式",
         "type": "string",
         "default": "local",
-        "keys": [
+        "options": [
           "local",
           "cloudflare",
           "both"
@@ -94,7 +94,7 @@
         "description": "[CloudFlare] 渠道选择模式",
         "type": "string",
         "default": "manual",
-        "keys": [
+        "options": [
           "manual",
           "auto"
         ],
