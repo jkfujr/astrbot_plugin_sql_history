@@ -141,5 +141,18 @@
         "hint": "上传到图床的哪个目录，使用相对路径，例如 QQ、images/chat。留空表示上传到根目录"
       }
     }
+  },
+  "advanced": {
+    "description": "高级选项",
+    "type": "object",
+    "hint": "插件整体高级调试和 troubleshooting 配置",
+    "items": {
+      "debug_log": {
+        "description": "开启调试日志",
+        "type": "bool",
+        "default": false,
+        "hint": "开启后输出更多调试日志，方便排查问题"
+      }
+    }
   }
 }

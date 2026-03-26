@@ -24,6 +24,7 @@ class MySQLPlugin(Star):
         # 读取分类配置
         db_conf = self.config.get("database", {})
         img_conf = self.config.get("image", {})
+        adv_conf = self.config.get("advanced", {})
 
         # 图片保存路径
         self.is_save_image = img_conf.get("is_save_image", False)
@@ -41,6 +42,7 @@ class MySQLPlugin(Star):
         self.cf_server_compress = img_conf.get("cf_server_compress", True)
         self.cf_return_full_url = img_conf.get("cf_return_full_url", True)
         self.cf_upload_folder = img_conf.get("cf_upload_folder", "QQ")
+        self.debug_log = adv_conf.get("debug_log", False)
 
         # 自动渠道轮询相关
         self._available_channels: list[str] = []
@@ -188,7 +190,8 @@ class MySQLPlugin(Star):
                     if isinstance(result, dict) and result.get('data'):
                         # 有些 API 会包装在 data 字段里
                         channels_data = result.get('data')
-                        logger.debug(f"从 result.data 提取渠道列表，数据类型: {type(channels_data)}")
+                        if self.debug_log:
+                            logger.debug(f"从 result.data 提取渠道列表，数据类型: {type(channels_data)}")
 
                     if not isinstance(channels_data, list):
                         logger.error(f"渠道列表返回格式错误，期望 list，实际得到 {type(channels_data)}，内容: {str(channels_data)[:500]}")
@@ -210,7 +213,8 @@ class MySQLPlugin(Star):
                         else:
                             logger.debug(f"跳过第 {idx} 个渠道，类型不支持: {type(channel)}")
 
-                    logger.debug(f"解析完成，共得到 {len(available)} 个渠道: {available}")
+                    if self.debug_log:
+                        logger.debug(f"解析完成，共得到 {len(available)} 个渠道: {available}")
 
                     if available:
                         self._available_channels = available
