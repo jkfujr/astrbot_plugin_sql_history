@@ -43,7 +43,7 @@ class MySQLPlugin(Star):
         self.debug_log = adv_conf.get("debug_log", False)
 
         # 自动渠道轮询相关
-        self._available_channels: list[str] = []
+        self._available_channels: list[dict] = []  # 存储为 {'name': str, 'type': str}
         self._round_robin_index = 0
         self._channels_fetched = False  # 标记是否已经获取过渠道列表，避免重复获取重置索引
 
@@ -110,10 +110,17 @@ class MySQLPlugin(Star):
         params['serverCompress'] = str(self.cf_server_compress).lower()
         # 根据渠道模式选择
         if self.cf_channel_mode == "auto" and self._available_channels:
-            upload_channel = self._get_next_channel()
-            params['channelName'] = upload_channel
-            # auto模式下只使用channelName，不设置uploadChannel避免冲突
-            logger.info(f"CF图床轮询选择渠道: [{upload_channel}] (索引: {self._round_robin_index}/{len(self._available_channels)})")
+            channel_obj = self._get_next_channel()
+            upload_channel = channel_obj.get('type')
+            channel_name = channel_obj.get('name')
+            
+            if upload_channel:
+                params['uploadChannel'] = upload_channel
+            if channel_name:
+                params['channelName'] = channel_name
+                
+            # auto模式下同时传递 uploadChannel 和 channelName
+            logger.info(f"CF图床轮询选择渠道: [{channel_name}] (类型: {upload_channel}, 索引: {self._round_robin_index}/{len(self._available_channels)})")
         else:
             params['uploadChannel'] = self.cf_upload_channel
         # 添加上传目录
@@ -207,7 +214,10 @@ class MySQLPlugin(Star):
                                         if channel.get('enabled', True):
                                             name = channel.get('name')
                                             if name:
-                                                available.append(name if isinstance(name, str) else str(name))
+                                                available.append({
+                                                    'name': name if isinstance(name, str) else str(name),
+                                                    'type': channel_type
+                                                })
                                                 if self.debug_log:
                                                     logger.debug(f"添加渠道: {name} (类型: {channel_type})")
                     elif isinstance(channels_data, list):
@@ -217,13 +227,22 @@ class MySQLPlugin(Star):
                         for idx, channel in enumerate(channels_data):
                             if isinstance(channel, str):
                                 # 直接是字符串列表: ["telegram", "cfr2", ...]
-                                available.append(channel)
+                                # 这种格式没有类型信息，默认使用 self.cf_upload_channel 的类型或者尝试猜测
+                                available.append({
+                                    'name': channel,
+                                    'type': self.cf_upload_channel # 回退到手动配置的类型
+                                })
                             elif isinstance(channel, dict):
                                 # 对象格式: {"name": "telegram", "enabled": true}
                                 if channel.get('enabled', True):
                                     name = channel.get('name') or channel.get('channelName') or channel.get('type')
+                                    # type 字段可能是类型也可能是名称，尽量取准确
+                                    c_type = channel.get('type') or self.cf_upload_channel
                                     if name:
-                                        available.append(name if isinstance(name, str) else str(name))
+                                        available.append({
+                                            'name': name if isinstance(name, str) else str(name),
+                                            'type': c_type
+                                        })
                             else:
                                 if self.debug_log:
                                     logger.debug(f"跳过第 {idx} 个渠道，类型不支持: {type(channel)}")
@@ -239,39 +258,43 @@ class MySQLPlugin(Star):
                             self._available_channels = available
                             self._round_robin_index = 0
                             self._channels_fetched = True
-                            logger.info(f"成功获取 {len(available)} 个可用渠道: {', '.join(available)}")
+                            logger.info(f"成功获取 {len(available)} 个可用渠道: {', '.join([c['name'] for c in available])}")
                             if self.debug_log:
                                 logger.debug(f"渠道列表已设置，轮询索引已重置为 0")
                         else:
                             # 已经获取过，只更新渠道列表不重置轮询索引
                             self._available_channels = available
-                            logger.info(f"更新渠道列表，共 {len(available)} 个可用渠道: {', '.join(available)}")
+                            logger.info(f"更新渠道列表，共 {len(available)} 个可用渠道: {', '.join([c['name'] for c in available])}")
                             if self.debug_log:
                                 logger.debug(f"渠道列表已更新，轮询索引保持当前值: {self._round_robin_index}")
                     else:
                         logger.warning("未获取到任何可用渠道，将回退到手动配置")
                         if self.cf_upload_channel:
-                            self._available_channels = [self.cf_upload_channel]
+                            self._available_channels = [{'name': self.cf_upload_channel, 'type': self.cf_upload_channel}]
 
         except Exception as e:
             logger.error(f"获取渠道列表异常: {str(e)}")
             if self.cf_upload_channel:
-                self._available_channels = [self.cf_upload_channel]
+                self._available_channels = [{'name': self.cf_upload_channel, 'type': self.cf_upload_channel}]
 
-    def _get_next_channel(self) -> str:
+    def _get_next_channel(self) -> dict:
         """轮询获取下一个上传渠道"""
         if not self._available_channels:
             # 如果没有获取到，回退到手动配置
-            return self.cf_upload_channel
+            return {'name': self.cf_upload_channel, 'type': self.cf_upload_channel}
 
         # Round-robin 轮询
         current_index = self._round_robin_index
-        channel = self._available_channels[current_index]
+        channel_obj = self._available_channels[current_index]
         self._round_robin_index = (self._round_robin_index + 1) % len(self._available_channels)
-        logger.info(f"CF轮询渠道: 当前索引={current_index}, 选中=[{channel}], 下一个索引={self._round_robin_index}, 总渠道数={len(self._available_channels)}")
+        
+        name = channel_obj.get('name')
+        c_type = channel_obj.get('type')
+        
+        logger.info(f"CF轮询渠道: 当前索引={current_index}, 选中=[{name}](类型: {c_type}), 下一个索引={self._round_robin_index}, 总渠道数={len(self._available_channels)}")
         if self.debug_log:
             logger.debug(f"所有可用渠道: {self._available_channels}")
-        return channel
+        return channel_obj
 
     async def _process_image(self, url: str) -> Optional[str]:
         """
