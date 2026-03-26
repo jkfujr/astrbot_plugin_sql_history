@@ -45,6 +45,7 @@ class MySQLPlugin(Star):
         # 自动渠道轮询相关
         self._available_channels: list[str] = []
         self._round_robin_index = 0
+        self._channels_fetched = False  # 标记是否已经获取过渠道列表，避免重复获取重置索引
 
         if self.is_save_image and not os.path.exists(self.image_save_path):
             os.makedirs(self.image_save_path, exist_ok=True)
@@ -84,8 +85,8 @@ class MySQLPlugin(Star):
             if self.storage_mode in ["cloudflare", "both"]:
                 if not self.cf_api_endpoint:
                     logger.warning("CloudFlare ImgBed 存储模式已启用，但API端点未配置")
-                # 如果是自动渠道模式，初始化时获取可用渠道列表
-                if self.cf_channel_mode == "auto":
+                # 如果是自动渠道模式，初始化时获取可用渠道列表（只获取一次，避免重复获取重置轮询索引）
+                if self.cf_channel_mode == "auto" and (not self._channels_fetched or len(self._available_channels) == 0):
                     await self._fetch_available_channels()
 
         except Exception as e:
@@ -234,9 +235,19 @@ class MySQLPlugin(Star):
                         logger.debug(f"解析完成，共得到 {len(available)} 个可用渠道: {available}")
 
                     if available:
-                        self._available_channels = available
-                        self._round_robin_index = 0
-                        logger.info(f"成功获取 {len(available)} 个可用渠道: {', '.join(available)}")
+                        if not self._channels_fetched:
+                            self._available_channels = available
+                            self._round_robin_index = 0
+                            self._channels_fetched = True
+                            logger.info(f"成功获取 {len(available)} 个可用渠道: {', '.join(available)}")
+                            if self.debug_log:
+                                logger.debug(f"渠道列表已设置，轮询索引已重置为 0")
+                        else:
+                            # 已经获取过，只更新渠道列表不重置轮询索引
+                            self._available_channels = available
+                            logger.info(f"更新渠道列表，共 {len(available)} 个可用渠道: {', '.join(available)}")
+                            if self.debug_log:
+                                logger.debug(f"渠道列表已更新，轮询索引保持当前值: {self._round_robin_index}")
                     else:
                         logger.warning("未获取到任何可用渠道，将回退到手动配置")
                         if self.cf_upload_channel:
