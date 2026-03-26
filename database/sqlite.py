@@ -37,16 +37,50 @@ class SQLiteStorage(BaseStorage):
             result = await cursor.fetchone()
             return bool(result)
 
-    async def save_image_record(self, image_hash: str, file_ext: str, file_size: int) -> None:
+    async def get_image_info(self, sha256_hash: str) -> Optional[dict]:
         async with self.conn.cursor() as cursor:
+            await cursor.execute(
+                "SELECT file_ext, cf_url, cf_uploaded FROM image_assets WHERE image_hash = ?",
+                (sha256_hash,)
+            )
+            row = await cursor.fetchone()
+            if row:
+                return {
+                    'file_ext': row[0],
+                    'cf_url': row[1],
+                    'cf_uploaded': bool(row[2])
+                }
+            return None
+
+    async def save_image_record(self, image_hash: str, file_ext: str, file_size: int, cf_url: Optional[str], cf_uploaded: bool) -> None:
+        async with self.conn.cursor() as cursor:
+            cf_upload_time = datetime.datetime.now() if cf_uploaded else None
             await cursor.execute("""
-                INSERT INTO image_assets (image_hash, file_ext, file_size, created_time)
-                VALUES (?, ?, ?, ?)
+                INSERT INTO image_assets (image_hash, file_ext, file_size, cf_url, cf_uploaded, cf_upload_time, created_time)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
             """, (
                 image_hash,
                 file_ext,
                 file_size,
+                cf_url,
+                1 if cf_uploaded else 0,
+                cf_upload_time,
                 datetime.datetime.now()
+            ))
+            await self.conn.commit()
+
+    async def update_image_cf_status(self, image_hash: str, cf_url: Optional[str], cf_uploaded: bool) -> None:
+        async with self.conn.cursor() as cursor:
+            cf_upload_time = datetime.datetime.now() if cf_uploaded else None
+            await cursor.execute("""
+                UPDATE image_assets
+                SET cf_url = ?, cf_uploaded = ?, cf_upload_time = ?
+                WHERE image_hash = ?
+            """, (
+                cf_url,
+                1 if cf_uploaded else 0,
+                cf_upload_time,
+                image_hash
             ))
             await self.conn.commit()
 

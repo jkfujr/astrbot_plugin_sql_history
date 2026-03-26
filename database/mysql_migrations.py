@@ -5,7 +5,7 @@ from astrbot import logger
 class MigrationManager:
     def __init__(self, pool: aiomysql.Pool):
         self.pool = pool
-        self.target_version = 4 # 当前代码支持的最高版本
+        self.target_version = 5 # 当前代码支持的最高版本
 
     async def get_current_version(self) -> int:
         async with self.pool.acquire() as conn:
@@ -130,7 +130,19 @@ class MigrationManager:
         await cursor.execute("SHOW INDEX FROM messages WHERE Key_name = 'idx_group_time'")
         if not await cursor.fetchone():
             await cursor.execute("CREATE INDEX idx_group_time ON messages (platform_type, group_id, timestamp)")
-            
+
         await cursor.execute("SHOW INDEX FROM messages WHERE Key_name = 'idx_session_time'")
         if not await cursor.fetchone():
             await cursor.execute("CREATE INDEX idx_session_time ON messages (session_id, timestamp)")
+
+    async def _migration_v5(self, cursor):
+        """为 image_assets 添加 CloudFlare ImgBed 相关字段"""
+        # 添加 CF 相关字段
+        await cursor.execute("SHOW COLUMNS FROM image_assets LIKE 'cf_url'")
+        if not await cursor.fetchone():
+            await cursor.execute("""
+                ALTER TABLE image_assets
+                ADD COLUMN cf_url TEXT AFTER file_size,
+                ADD COLUMN cf_uploaded TINYINT(1) DEFAULT 0 AFTER cf_url,
+                ADD COLUMN cf_upload_time DATETIME NULL AFTER cf_uploaded
+            """)

@@ -5,7 +5,7 @@ from astrbot import logger
 class SQLiteMigrationManager:
     def __init__(self, conn: aiosqlite.Connection):
         self.conn = conn
-        self.target_version = 4 # 当前代码支持的最高版本
+        self.target_version = 5 # 当前代码支持的最高版本
 
     async def get_current_version(self) -> int:
         async with self.conn.cursor() as cursor:
@@ -143,3 +143,14 @@ class SQLiteMigrationManager:
         """添加多群组检索的联合索引以提升百万级别海量聊天记录拉取性能"""
         await cursor.execute("CREATE INDEX IF NOT EXISTS idx_group_time ON messages (platform_type, group_id, timestamp)")
         await cursor.execute("CREATE INDEX IF NOT EXISTS idx_session_time ON messages (session_id, timestamp)")
+
+    async def _migration_v5(self, cursor):
+        """为 image_assets 添加 CloudFlare ImgBed 相关字段"""
+        await cursor.execute("PRAGMA table_info(image_assets)")
+        columns = [row[1] for row in await cursor.fetchall()]
+        if 'cf_url' not in columns:
+            await cursor.execute("ALTER TABLE image_assets ADD COLUMN cf_url TEXT")
+        if 'cf_uploaded' not in columns:
+            await cursor.execute("ALTER TABLE image_assets ADD COLUMN cf_uploaded INTEGER DEFAULT 0")
+        if 'cf_upload_time' not in columns:
+            await cursor.execute("ALTER TABLE image_assets ADD COLUMN cf_upload_time DATETIME")

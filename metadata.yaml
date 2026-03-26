@@ -1,5 +1,5 @@
 name: astrbot_plugin_sql_history
 desc: MySQL存储聊天记录,群史官
-version: v1.1.0
+version: v1.2.0
 author: LW&jkfujr
-repo: https://github.com/LWWD/astrbot_plugin_sql_history
+repo: https://github.com/jkfujr/astrbot_plugin_sql_history

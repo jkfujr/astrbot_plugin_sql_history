@@ -47,7 +47,7 @@
   "image": {
     "description": "图片资源设置",
     "type": "object",
-    "hint": "开启后，所有的聊天图片将被下载并落盘备份。注意：这会占用极其庞大的磁盘存储空间",
+    "hint": "开启后，所有的聊天图片将被下载并备份。注意：这会占用磁盘存储空间",
     "items": {
       "is_save_image": {
         "description": "开启图片本地持久化",
@@ -60,6 +60,79 @@
         "type": "string",
         "default": "data/plugin_data/astrbot_plugin_sql_history/image",
         "hint": "建议存放在 data/plugin_data 目录下防止丢失，插件将会自动基于此目录创建并持久化文件"
+      },
+      "storage_mode": {
+        "description": "图像存储模式",
+        "type": "string",
+        "default": "local",
+        "keys": [
+          "local",
+          "cloudflare",
+          "both"
+        ],
+        "hint": "选择图片存储方式：本地存储(local) / CloudFlare ImgBed图床(cloudflare) / 同时存储到两者(both)"
+      },
+      "auto_reupload_old": {
+        "description": "自动补传旧图",
+        "type": "bool",
+        "default": true,
+        "hint": "检测到数据库中已存在但未上传到CF的旧图时，是否自动补传。开启后切换存储模式时，新消息中遇到的旧图会自动补传到图床"
+      },
+      "cf_api_endpoint": {
+        "description": "[CloudFlare] API端点地址",
+        "type": "string",
+        "default": "",
+        "hint": "CloudFlare ImgBed 服务的完整地址，例如 https://img.example.com"
+      },
+      "cf_auth_type": {
+        "description": "[CloudFlare] 认证方式",
+        "type": "string",
+        "default": "authcode",
+        "keys": [
+          "authcode",
+          "token"
+        ],
+        "hint": "认证方式：authCode 或 API Token"
+      },
+      "cf_auth_code": {
+        "description": "[CloudFlare] 上传认证码",
+        "type": "string",
+        "default": "",
+        "hint": "CloudFlare ImgBed 配置的 authCode"
+      },
+      "cf_api_token": {
+        "description": "[CloudFlare] API Token",
+        "type": "string",
+        "default": "",
+        "hint": "CloudFlare ImgBed 生成的 API Token（需要 upload 权限）"
+      },
+      "cf_channel_mode": {
+        "description": "[CloudFlare] 渠道选择模式",
+        "type": "string",
+        "default": "manual",
+        "keys": [
+          "manual",
+          "auto"
+        ],
+        "hint": "manual: 手动指定上传渠道；auto: 自动从/api/channels获取可用渠道，轮询负载均衡"
+      },
+      "cf_upload_channel": {
+        "description": "[CloudFlare] 手动指定上传渠道",
+        "type": "string",
+        "default": "telegram",
+        "hint": "存储渠道：telegram、cfr2、s3、discord、huggingface。channel_mode=manual 时生效"
+      },
+      "cf_server_compress": {
+        "description": "[CloudFlare] 服务端压缩",
+        "type": "bool",
+        "default": true,
+        "hint": "是否开启服务端图片压缩"
+      },
+      "cf_return_full_url": {
+        "description": "[CloudFlare] 返回完整URL",
+        "type": "bool",
+        "default": true,
+        "hint": "是否返回完整的图片URL（否则只返回路径部分）"
       }
     }
   }

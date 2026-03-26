@@ -14,7 +14,7 @@ from typing import Optional
 from .database import MySQLStorage, SQLiteStorage, BaseStorage
 
 
-@register("astrbot_plugin_sql_history", "LW&jkfujr", "MySQL日志(Hash去重版)", "1.1.0")
+@register("astrbot_plugin_sql_history", "LW&jkfujr", "MySQL日志(Hash去重版)", "1.2.0")
 class MySQLPlugin(Star):
     def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context)
@@ -28,12 +28,29 @@ class MySQLPlugin(Star):
         # 图片保存路径
         self.is_save_image = img_conf.get("is_save_image", False)
         self.image_save_path = img_conf.get("image_save_path", "data/plugin_data/astrbot_plugin_sql_history/image") or "data/plugin_data/astrbot_plugin_sql_history/image"
+
+        # 新增：读取存储模式和CF图床配置
+        self.storage_mode = img_conf.get("storage_mode", "local")  # local / cloudflare / both
+        self.auto_reupload_old = img_conf.get("auto_reupload_old", True)
+        self.cf_api_endpoint = img_conf.get("cf_api_endpoint", "").rstrip('/') if img_conf.get("cf_api_endpoint") else ""
+        self.cf_auth_type = img_conf.get("cf_auth_type", "authcode")
+        self.cf_auth_code = img_conf.get("cf_auth_code", "")
+        self.cf_api_token = img_conf.get("cf_api_token", "")
+        self.cf_channel_mode = img_conf.get("cf_channel_mode", "manual")  # manual / auto
+        self.cf_upload_channel = img_conf.get("cf_upload_channel", "telegram")
+        self.cf_server_compress = img_conf.get("cf_server_compress", True)
+        self.cf_return_full_url = img_conf.get("cf_return_full_url", True)
+
+        # 自动渠道轮询相关
+        self._available_channels: list[str] = []
+        self._round_robin_index = 0
+
         if self.is_save_image and not os.path.exists(self.image_save_path):
-            os.makedirs(self.image_save_path)
+            os.makedirs(self.image_save_path, exist_ok=True)
 
     async def initialize(self):
         logger.info("正在初始化 astrbot_plugin_sql_history 插件...")
-        
+
         db_conf = self.config.get("database", {})
         db_type = db_conf.get("db_type", "sqlite")
 
@@ -43,7 +60,7 @@ class MySQLPlugin(Star):
                 database = db_conf.get("database")
                 username = db_conf.get("username")
                 password = db_conf.get("password")
-                
+
                 if not all([host, database, username, password]):
                     logger.info("MySQL 尚未配置。若需启用数据库日志，请在插件面板填写连接信息。")
                     return
@@ -60,17 +77,148 @@ class MySQLPlugin(Star):
             else:
                 logger.error(f"不支持的数据库类型: {db_type}")
                 return
-            
+
             await self.storage.initialize()
             logger.info(f"成功连接至数据库: {db_type}")
+            if self.storage_mode in ["cloudflare", "both"]:
+                if not self.cf_api_endpoint:
+                    logger.warning("CloudFlare ImgBed 存储模式已启用，但API端点未配置")
+                # 如果是自动渠道模式，初始化时获取可用渠道列表
+                if self.cf_channel_mode == "auto":
+                    await self._fetch_available_channels()
 
         except Exception as e:
             logger.error(f"插件初始化失败: {str(e)}")
             raise
 
+    async def _upload_to_cf_imgbed(self, img_data: bytes, sha256_hash: str, file_ext: str) -> Optional[str]:
+        """
+        上传图片到 CloudFlare ImgBed
+        返回: 上传成功返回图片URL，失败返回 None
+        """
+        if not self.cf_api_endpoint:
+            logger.error("CloudFlare ImgBed API 端点未配置，跳过上传")
+            return None
+
+        # 构建上传URL
+        upload_url = f"{self.cf_api_endpoint}/upload"
+
+        # 构建查询参数
+        params = {}
+        if self.cf_auth_type == "authcode" and self.cf_auth_code:
+            params['authCode'] = self.cf_auth_code
+        params['serverCompress'] = str(self.cf_server_compress).lower()
+        # 根据渠道模式选择
+        if self.cf_channel_mode == "auto" and self._available_channels:
+            upload_channel = self._get_next_channel()
+            params['channelName'] = upload_channel
+            logger.debug(f"轮询选择渠道: {upload_channel}")
+        else:
+            params['uploadChannel'] = self.cf_upload_channel
+        params['autoRetry'] = 'true'
+        params['returnFormat'] = 'full' if self.cf_return_full_url else 'default'
+
+        # 文件名
+        file_name = f"{sha256_hash}{file_ext}"
+
+        try:
+            # 使用 aiohttp 进行 multipart/form-data 上传
+            async with aiohttp.ClientSession() as session:
+                # 添加认证头（如果使用 Token 认证）
+                headers = {}
+                if self.cf_auth_type == "token" and self.cf_api_token:
+                    headers['Authorization'] = f"Bearer {self.cf_api_token}"
+
+                # 构建 form data
+                form = aiohttp.FormData()
+                form.add_field('file', img_data, filename=file_name)
+
+                async with session.post(upload_url, params=params, headers=headers, data=form) as resp:
+                    if resp.status != 200:
+                        logger.error(f"CF图床上传失败，状态码: {resp.status}")
+                        return None
+
+                    # 解析响应: [{"src": "/file/abc123.jpg"}]
+                    result = await resp.json()
+                    if not result or not isinstance(result, list) or len(result) == 0:
+                        logger.error("CF图床返回空响应或响应格式错误")
+                        return None
+
+                    image_url = result[0].get('src')
+                    if not image_url:
+                        logger.error("CF图床响应中未找到src字段")
+                        return None
+
+                    logger.info(f"图片成功上传至CF图床: {sha256_hash} -> {image_url}")
+                    return image_url
+
+        except Exception as e:
+            logger.error(f"CF图床上传异常 {sha256_hash}: {str(e)}")
+            return None
+
+    async def _fetch_available_channels(self) -> None:
+        """从 /api/channels 获取可用上传渠道列表"""
+        if not self.cf_api_endpoint:
+            return
+
+        channels_url = f"{self.cf_api_endpoint}/api/channels"
+
+        try:
+            async with aiohttp.ClientSession() as session:
+                headers = {}
+                if self.cf_auth_type == "token" and self.cf_api_token:
+                    headers['Authorization'] = f"Bearer {self.cf_api_token}"
+
+                async with session.get(channels_url, headers=headers) as resp:
+                    if resp.status != 200:
+                        logger.error(f"获取渠道列表失败，状态码: {resp.status}")
+                        return
+
+                    result = await resp.json()
+                    if not result or not isinstance(result, list):
+                        logger.error("渠道列表返回格式错误")
+                        return
+
+                    # 提取可用渠道名称
+                    # API 返回格式示例: [{"name": "telegram", "enabled": true}, ...]
+                    available = []
+                    for channel in result:
+                        if isinstance(channel, dict):
+                            # 不同 API 返回格式可能有差异，兼容几种常见格式
+                            if channel.get('enabled', True):
+                                name = channel.get('name') or channel.get('channelName')
+                                if name:
+                                    available.append(name)
+
+                    if available:
+                        self._available_channels = available
+                        self._round_robin_index = 0
+                        logger.info(f"成功获取 {len(available)} 个可用渠道: {', '.join(available)}")
+                    else:
+                        logger.warning("未获取到任何可用渠道，将回退到手动配置")
+                        if self.cf_upload_channel:
+                            self._available_channels = [self.cf_upload_channel]
+
+        except Exception as e:
+            logger.error(f"获取渠道列表异常: {str(e)}")
+            if self.cf_upload_channel:
+                self._available_channels = [self.cf_upload_channel]
+
+    def _get_next_channel(self) -> str:
+        """轮询获取下一个上传渠道"""
+        if not self._available_channels:
+            # 如果没有获取到，回退到手动配置
+            return self.cf_upload_channel
+
+        # Round-robin 轮询
+        channel = self._available_channels[self._round_robin_index]
+        self._round_robin_index = (self._round_robin_index + 1) % len(self._available_channels)
+        return channel
+
     async def _process_image(self, url: str) -> Optional[str]:
         """
-        处理图片：下载 -> Hash -> 查重 -> 保存/返回Hash
+        处理图片：下载 -> Hash -> 查重 -> 根据配置存储到对应位置
+        支持：本地存储 / CloudFlare ImgBed / 同时存储
         返回: image_hash (如果失败返回 None)
         """
         if not url:
@@ -87,44 +235,98 @@ class MySQLPlugin(Star):
             # 2. 计算 SHA256 Hash
             sha256_hash = hashlib.sha256(img_data).hexdigest()
 
-            # 3. 检查数据库是否存在该 Hash
-            is_exists = await self.storage.check_image_exists(sha256_hash)
+            # 3. 判断存储需求
+            need_cf = self.storage_mode in ["cloudflare", "both"]
+            need_local = self.storage_mode in ["local", "both"] and self.is_save_image
 
-            if is_exists:
-                # 3.1 存在：直接返回 Hash，不再下载
-                logger.debug(f"图片已存在，Hash: {sha256_hash}")
+            # 4. 查询数据库获取完整信息
+            img_info = await self.storage.get_image_info(sha256_hash)
+
+            # 情况1: 数据库中已存在这张图片（内容相同）
+            if img_info:
+                # 已经上传过CF，或者不需要CF，直接返回
+                if not need_cf or (img_info.get('cf_uploaded', False) and img_info.get('cf_url')):
+                    logger.debug(f"图片已存在，Hash: {sha256_hash}")
+                    return sha256_hash
+
+                # 需要补传: 已存在但未上传到CF，且开启了自动补传
+                if need_cf and self.auto_reupload_old:
+                    logger.info(f"检测到未上传旧图，自动补传至CF: {sha256_hash}")
+
+                    # 如果本地有文件，优先从本地读取（避免重新下载）
+                    if self.is_save_image:
+                        found = False
+                        for ext in ['.jpg', '.png', '.gif', '.webp']:
+                            local_path = Path(self.image_save_path) / f"{sha256_hash}{ext}"
+                            if local_path.exists():
+                                async with aiofiles.open(local_path, mode='rb') as f:
+                                    img_data = await f.read()
+                                # 重新计算哈希验证内容一致性
+                                check_hash = hashlib.sha256(img_data).hexdigest()
+                                if check_hash != sha256_hash:
+                                    logger.warning(f"本地文件哈希不匹配，跳过: {sha256_hash} vs {check_hash}")
+                                else:
+                                    found = True
+                                break
+
+                    # 获取文件扩展名（从数据库记录）
+                    file_ext = img_info.get('file_ext', '.jpg')
+
+                    # 上传到CF图床
+                    cf_url = await self._upload_to_cf_imgbed(img_data, sha256_hash, file_ext)
+
+                    # 更新数据库记录（即使失败也要更新状态）
+                    await self.storage.update_image_cf_status(
+                        image_hash=sha256_hash,
+                        cf_url=cf_url,
+                        cf_uploaded=cf_url is not None
+                    )
+
                 return sha256_hash
-            else:
-                # 3.2 不存在：保存文件并入库
 
-                # 确定后缀
-                # 简单判断，实际可根据 magic number 判断
-                file_ext = ".jpg"
-                if img_data[:4].startswith(b'\x89PNG'):
-                    file_ext = ".png"
-                elif img_data[:3].startswith(b'GIF'):
-                    file_ext = ".gif"
-                elif img_data[:4].startswith(b'RIFF') and img_data[8:12] == b'WEBP':
-                    file_ext = ".webp"
+            # 情况2: 新图片，数据库不存在，需要全新处理
+            # 确定文件后缀
+            # 通过文件头魔法数字判断，比猜测更准确
+            file_ext = ".jpg"
+            if len(img_data) >= 4 and img_data[:4].startswith(b'\x89PNG'):
+                file_ext = ".png"
+            elif len(img_data) >= 3 and img_data[:3].startswith(b'GIF'):
+                file_ext = ".gif"
+            elif len(img_data) >= 12 and img_data[:4].startswith(b'RIFF') and img_data[8:12] == b'WEBP':
+                file_ext = ".webp"
 
+            # 先尝试上传到CF图床（如果需要）
+            cf_url = None
+            cf_uploaded = False
+            if need_cf:
+                cf_url = await self._upload_to_cf_imgbed(img_data, sha256_hash, file_ext)
+                cf_uploaded = cf_url is not None
+
+            # 本地保存（如果需要）
+            if need_local:
                 # 使用 Hash 作为文件名
                 file_name = f"{sha256_hash}{file_ext}"
                 save_path = Path(self.image_save_path) / file_name
-                abs_path = str(save_path.absolute())
-
                 # 写入磁盘
                 async with aiofiles.open(save_path, mode='wb') as f:
                     await f.write(img_data)
 
-                # 写入 image_assets 表
-                await self.storage.save_image_record(
-                    image_hash=sha256_hash,
-                    file_ext=file_ext,
-                    file_size=len(img_data)
-                )
+            # 保存到数据库
+            await self.storage.save_image_record(
+                image_hash=sha256_hash,
+                file_ext=file_ext,
+                file_size=len(img_data),
+                cf_url=cf_url,
+                cf_uploaded=cf_uploaded
+            )
 
-                logger.info(f"新图片已归档: {sha256_hash}")
-                return sha256_hash
+            # 输出日志
+            if need_cf and cf_uploaded:
+                logger.info(f"新图片已归档并上传至CF图床: {sha256_hash}")
+            elif need_local:
+                logger.info(f"新图片已归档至本地: {sha256_hash}")
+
+            return sha256_hash
 
         except Exception as e:
             logger.error(f"处理图片出错 {url}: {e}")
@@ -139,8 +341,9 @@ class MySQLPlugin(Star):
             # 收集所有图片的 Hash
             image_hashes = []
 
-            # 遍历消息组件寻找图片
-            if self.is_save_image:
+            # 判断是否需要处理图片
+            need_process = self.is_save_image or self.storage_mode in ["cloudflare", "both"]
+            if need_process and self.storage:
                 for component in msg.message:
                     if isinstance(component, Image):
                         if component.url:

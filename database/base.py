@@ -18,8 +18,18 @@ class BaseStorage(abc.ABC):
         pass
 
     @abc.abstractmethod
-    async def save_image_record(self, image_hash: str, file_ext: str, file_size: int) -> None:
+    async def get_image_info(self, sha256_hash: str) -> Optional[dict]:
+        """获取图片完整信息，包括cf_uploaded状态"""
+        pass
+
+    @abc.abstractmethod
+    async def save_image_record(self, image_hash: str, file_ext: str, file_size: int, cf_url: Optional[str], cf_uploaded: bool) -> None:
         """保存图片记录至数据库"""
+        pass
+
+    @abc.abstractmethod
+    async def update_image_cf_status(self, image_hash: str, cf_url: Optional[str], cf_uploaded: bool) -> None:
+        """更新图片CF上传状态（用于补传旧图）"""
         pass
 
     @abc.abstractmethod
