@@ -115,6 +115,7 @@ class MySQLPlugin(Star):
         if self.cf_channel_mode == "auto" and self._available_channels:
             upload_channel = self._get_next_channel()
             params['channelName'] = upload_channel
+            # auto模式下只使用channelName，不设置uploadChannel避免冲突
             logger.info(f"CF图床轮询选择渠道: [{upload_channel}] (索引: {self._round_robin_index}/{len(self._available_channels)})")
         else:
             params['uploadChannel'] = self.cf_upload_channel
