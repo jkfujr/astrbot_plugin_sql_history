@@ -84,27 +84,11 @@
         "default": "",
         "hint": "CloudFlare ImgBed 服务的完整地址，例如 https://img.example.com"
       },
-      "cf_auth_type": {
-        "description": "[CloudFlare] 认证方式",
-        "type": "string",
-        "default": "authcode",
-        "keys": [
-          "authcode",
-          "token"
-        ],
-        "hint": "认证方式：authCode 或 API Token"
-      },
-      "cf_auth_code": {
-        "description": "[CloudFlare] 上传认证码",
-        "type": "string",
-        "default": "",
-        "hint": "CloudFlare ImgBed 配置的 authCode"
-      },
       "cf_api_token": {
         "description": "[CloudFlare] API Token",
         "type": "string",
         "default": "",
-        "hint": "CloudFlare ImgBed 生成的 API Token（需要 upload 权限）"
+        "hint": "CloudFlare ImgBed 生成的 API Token，需要 upload 权限"
       },
       "cf_channel_mode": {
         "description": "[CloudFlare] 渠道选择模式",

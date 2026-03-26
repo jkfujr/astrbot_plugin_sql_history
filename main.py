@@ -34,8 +34,6 @@ class MySQLPlugin(Star):
         self.storage_mode = img_conf.get("storage_mode", "local")  # local / cloudflare / both
         self.auto_reupload_old = img_conf.get("auto_reupload_old", True)
         self.cf_api_endpoint = img_conf.get("cf_api_endpoint", "").rstrip('/') if img_conf.get("cf_api_endpoint") else ""
-        self.cf_auth_type = img_conf.get("cf_auth_type", "authcode")
-        self.cf_auth_code = img_conf.get("cf_auth_code", "")
         self.cf_api_token = img_conf.get("cf_api_token", "")
         self.cf_channel_mode = img_conf.get("cf_channel_mode", "manual")  # manual / auto
         self.cf_upload_channel = img_conf.get("cf_upload_channel", "telegram")
@@ -108,8 +106,6 @@ class MySQLPlugin(Star):
 
         # 构建查询参数
         params = {}
-        if self.cf_auth_type == "authcode" and self.cf_auth_code:
-            params['authCode'] = self.cf_auth_code
         params['serverCompress'] = str(self.cf_server_compress).lower()
         # 根据渠道模式选择
         if self.cf_channel_mode == "auto" and self._available_channels:
@@ -134,9 +130,9 @@ class MySQLPlugin(Star):
         try:
             # 使用 aiohttp 进行 multipart/form-data 上传
             async with aiohttp.ClientSession() as session:
-                # 添加认证头（如果使用 Token 认证）
+                # 添加认证头
                 headers = {}
-                if self.cf_auth_type == "token" and self.cf_api_token:
+                if self.cf_api_token:
                     headers['Authorization'] = f"Bearer {self.cf_api_token}"
 
                 # 构建 form data
@@ -176,7 +172,7 @@ class MySQLPlugin(Star):
         try:
             async with aiohttp.ClientSession() as session:
                 headers = {}
-                if self.cf_auth_type == "token" and self.cf_api_token:
+                if self.cf_api_token:
                     headers['Authorization'] = f"Bearer {self.cf_api_token}"
 
                 async with session.get(channels_url, headers=headers) as resp:
