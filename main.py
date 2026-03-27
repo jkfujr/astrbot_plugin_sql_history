@@ -443,7 +443,7 @@ class MySQLPlugin(Star):
                     elif isinstance(component, Forward):
                         # 处理转发消息
                         try:
-                            adapter = self.context.get_platform_adapter_by_name(event.bot_id)
+                            adapter = self.context.get_platform_inst(event.get_platform_id())
                             if isinstance(adapter, AiocqhttpAdapter):
                                 # 获取转发详情
                                 nodes_res = await adapter.bot.call_action("get_forward_msg", message_id=component.id)
