@@ -87,15 +87,20 @@ class WebUIServer:
             allow_headers=["*"],
         )
 
+        if static_dir.exists():
+            # 挂载 assets 目录在 /assets 路径下，因为 index.html 引用的是 /assets/
+            assets_dir = static_dir / "assets"
+            if assets_dir.exists():
+                self._app.mount("/assets", StaticFiles(directory=str(assets_dir)), name="assets")
+            # 同时也保留根路径 index.html 的手动提供，或者挂载整个 static 到根（放在最后）
+            # 但为了不影响 /api，我们手动处理 / 并在 assets 目录下挂载
+            
         @self._app.get("/", response_class=HTMLResponse)
         async def serve_index():
             index_path = static_dir / "index.html"
             if not index_path.exists():
                 return HTMLResponse("Frontend files not found. Please build the frontend first.")
             return HTMLResponse(index_path.read_text(encoding="utf-8"))
-
-        if static_dir.exists():
-            self._app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
         @self._app.post("/api/login")
         async def login(payload: dict[str, Any]):
