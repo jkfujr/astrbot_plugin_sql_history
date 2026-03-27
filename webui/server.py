@@ -118,8 +118,7 @@ class WebUIServer:
 
         @self._app.get("/api/messages")
         async def get_messages(session_id: str, page: int = 1, page_size: int = 20, token: str = Depends(self._auth_dependency())):
-            offset = (page - 1) * page_size
-            messages = await self.storage.get_messages(session_id, page_size, offset)
+            messages = await self.storage.get_messages(session_id, page, page_size)
             return {"data": messages}
 
         @self._app.get("/api/images/{image_hash}")

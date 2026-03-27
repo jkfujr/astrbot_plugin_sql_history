@@ -43,6 +43,6 @@ class BaseStorage(abc.ABC):
         pass
 
     @abc.abstractmethod
-    async def get_messages(self, session_id: str, limit: int, offset: int) -> list[dict]:
+    async def get_messages(self, session_id: str, page: int = 1, page_size: int = 20) -> list[dict]:
         """获取指定会话的消息记录"""
         pass
