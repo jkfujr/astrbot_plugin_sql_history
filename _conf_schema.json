@@ -126,6 +126,34 @@
       }
     }
   },
+  "webui": {
+    "description": "WebUI 控制台设置",
+    "type": "object",
+    "hint": "开启后，可以通过浏览器访问聊天记录浏览界面",
+    "items": {
+      "enabled": {
+        "description": "开启 WebUI",
+        "type": "bool",
+        "default": false
+      },
+      "host": {
+        "description": "监听地址",
+        "type": "string",
+        "default": "0.0.0.0"
+      },
+      "port": {
+        "description": "监听端口",
+        "type": "int",
+        "default": 11451
+      },
+      "access_password": {
+        "description": "访问密码",
+        "type": "string",
+        "default": "",
+        "hint": "留空则自动生成随机密码并在日志中输出"
+      }
+    }
+  },
   "advanced": {
     "description": "高级选项",
     "type": "object",

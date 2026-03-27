@@ -114,3 +114,25 @@ class MySQLStorage(BaseStorage):
                     timestamp,
                     dt_object
                 ))
+
+    async def get_sessions(self) -> list[dict]:
+        async with self.pool.acquire() as conn:
+            async with conn.cursor(aiomysql.DictCursor) as cursor:
+                await cursor.execute("""
+                    SELECT session_id, group_id, sender, message_str, timestamp 
+                    FROM messages 
+                    WHERE id IN (SELECT MAX(id) FROM messages GROUP BY session_id)
+                    ORDER BY timestamp DESC
+                """)
+                return await cursor.fetchall()
+
+    async def get_messages(self, session_id: str, limit: int, offset: int) -> list[dict]:
+        async with self.pool.acquire() as conn:
+            async with conn.cursor(aiomysql.DictCursor) as cursor:
+                await cursor.execute("""
+                    SELECT * FROM messages 
+                    WHERE session_id = %s 
+                    ORDER BY timestamp ASC 
+                    LIMIT %s OFFSET %s
+                """, (session_id, limit, offset))
+                return await cursor.fetchall()

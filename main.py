@@ -1,8 +1,3 @@
-from astrbot import logger
-from astrbot.api.event import filter, AstrMessageEvent
-from astrbot.api.star import Context, Star, register
-from astrbot.api import AstrBotConfig
-from astrbot.api.message_components import Image
 import json
 import os
 import aiohttp
@@ -11,7 +6,16 @@ import hashlib
 import datetime
 from pathlib import Path
 from typing import Optional
+
+from astrbot import logger
+from astrbot.api.event import filter, AstrMessageEvent
+from astrbot.api.star import Context, Star, register
+from astrbot.api import AstrBotConfig
+from astrbot.api.message_components import Image
+
+
 from .database import MySQLStorage, SQLiteStorage, BaseStorage
+from .webui import WebUIServer
 
 
 @register("astrbot_plugin_sql_history", "LW&jkfujr", "MySQL日志(Hash去重版)", "1.2.0")
@@ -20,6 +24,7 @@ class MySQLPlugin(Star):
         super().__init__(context)
         self.config = config
         self.storage: Optional[BaseStorage] = None
+        self.webui_server: Optional[WebUIServer] = None
 
         # 读取分类配置
         db_conf = self.config.get("database", {})
@@ -88,6 +93,8 @@ class MySQLPlugin(Star):
                 # 如果是自动渠道模式，初始化时获取可用渠道列表（只获取一次，避免重复获取重置轮询索引）
                 if self.cf_channel_mode == "auto" and (not self._channels_fetched or len(self._available_channels) == 0):
                     await self._fetch_available_channels()
+
+            await self._start_webui()
 
         except Exception as e:
             logger.error(f"插件初始化失败: {str(e)}")
@@ -458,5 +465,29 @@ class MySQLPlugin(Star):
             logger.error(f"日志记录异常: {e}")
 
     async def terminate(self):
+        await self._stop_webui()
         if self.storage:
             await self.storage.terminate()
+
+    async def _start_webui(self):
+        webui_config = self.config.get("webui", {})
+        if not webui_config.get("enabled", False):
+            return
+        
+        if self.webui_server:
+            return
+        
+        try:
+            self.webui_server = WebUIServer(
+                storage=self.storage,
+                config=webui_config,
+                image_save_path=self.image_save_path
+            )
+            await self.webui_server.start()
+        except Exception as e:
+            logger.error(f"启动 WebUI 失败: {e}")
+
+    async def _stop_webui(self):
+        if self.webui_server:
+            await self.webui_server.stop()
+            self.webui_server = None

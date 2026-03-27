@@ -36,3 +36,13 @@ class BaseStorage(abc.ABC):
     async def save_message(self, message_id: str, platform_type: str, self_id: str, session_id: str, group_id: Optional[str], sender_data: dict, message_str: str, raw_message: dict, image_hashes: list, timestamp: int) -> None:
         """保存消息记录至数据库"""
         pass
+
+    @abc.abstractmethod
+    async def get_sessions(self) -> list[dict]:
+        """获取所有会话列表"""
+        pass
+
+    @abc.abstractmethod
+    async def get_messages(self, session_id: str, limit: int, offset: int) -> list[dict]:
+        """获取指定会话的消息记录"""
+        pass

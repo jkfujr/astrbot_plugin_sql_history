@@ -103,6 +103,26 @@ class SQLiteStorage(BaseStorage):
                 json.dumps(raw_message),
                 json.dumps(image_hashes),
                 timestamp,
-                dt_object
-            ))
             await self.conn.commit()
+
+    async def get_sessions(self) -> list[dict]:
+        async with self.conn.execute("""
+            SELECT session_id, group_id, sender, message_str, timestamp 
+            FROM messages 
+            WHERE id IN (SELECT MAX(id) FROM messages GROUP BY session_id)
+            ORDER BY timestamp DESC
+        """) as cursor:
+            cursor.row_factory = aiosqlite.Row
+            rows = await cursor.fetchall()
+            return [dict(row) for row in rows]
+
+    async def get_messages(self, session_id: str, limit: int, offset: int) -> list[dict]:
+        async with self.conn.execute("""
+            SELECT * FROM messages 
+            WHERE session_id = ? 
+            ORDER BY timestamp ASC 
+            LIMIT ? OFFSET ?
+        """, (session_id, limit, offset)) as cursor:
+            cursor.row_factory = aiosqlite.Row
+            rows = await cursor.fetchall()
+            return [dict(row) for row in rows]
