@@ -103,6 +103,8 @@ class SQLiteStorage(BaseStorage):
                 json.dumps(raw_message),
                 json.dumps(image_hashes),
                 timestamp,
+                dt_object
+            ))
             await self.conn.commit()
 
     async def get_sessions(self) -> list[dict]:
