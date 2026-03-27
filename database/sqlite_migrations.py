@@ -5,7 +5,7 @@ from astrbot import logger
 class SQLiteMigrationManager:
     def __init__(self, conn: aiosqlite.Connection):
         self.conn = conn
-        self.target_version = 5 # 当前代码支持的最高版本
+        self.target_version = 6 # 当前代码支持的最高版本
 
     async def get_current_version(self) -> int:
         async with self.conn.cursor() as cursor:
@@ -96,6 +96,7 @@ class SQLiteMigrationManager:
                 message_str   TEXT         NOT NULL,
                 raw_message   TEXT,
                 image_ids     JSON,
+                forward_data  JSON,
                 timestamp     INTEGER      NOT NULL,
                 created_time  DATETIME     NOT NULL
             )
@@ -104,14 +105,10 @@ class SQLiteMigrationManager:
     async def _migration_v2(self, cursor):
         """新增 file_ext 字段"""
         await cursor.execute("PRAGMA table_info(image_assets)")
-        columns = [row[1] for row in await cursor.fetchall()]
-        if 'file_ext' not in columns:
+        columns = await cursor.fetchall()
+        column_names = [column[1] for column in columns]
+        if 'file_ext' not in column_names:
             await cursor.execute("ALTER TABLE image_assets ADD COLUMN file_ext VARCHAR(10)")
-            await cursor.execute("""
-                UPDATE image_assets 
-                SET file_ext = '.jpg'
-                WHERE file_ext IS NULL
-            """)
 
     async def _migration_v3(self, cursor):
         """物理移除废弃的 file_path 字段"""
@@ -154,3 +151,11 @@ class SQLiteMigrationManager:
             await cursor.execute("ALTER TABLE image_assets ADD COLUMN cf_uploaded INTEGER DEFAULT 0")
         if 'cf_upload_time' not in columns:
             await cursor.execute("ALTER TABLE image_assets ADD COLUMN cf_upload_time DATETIME")
+
+    async def _migration_v6(self, cursor):
+        """新增 forward_data 字段"""
+        await cursor.execute("PRAGMA table_info(messages)")
+        columns = await cursor.fetchall()
+        column_names = [column[1] for column in columns]
+        if 'forward_data' not in column_names:
+            await cursor.execute("ALTER TABLE messages ADD COLUMN forward_data JSON")

@@ -33,7 +33,7 @@ class BaseStorage(abc.ABC):
         pass
 
     @abc.abstractmethod
-    async def save_message(self, message_id: str, platform_type: str, self_id: str, session_id: str, group_id: Optional[str], sender_data: dict, message_str: str, raw_message: dict, image_hashes: list, timestamp: int) -> None:
+    async def save_message(self, message_id: str, platform_type: str, self_id: str, session_id: str, group_id: Optional[str], sender_data: dict, message_str: str, raw_message: dict, image_hashes: list, timestamp: int, forward_data: Optional[list] = None) -> None:
         """保存消息记录至数据库"""
         pass
 

@@ -54,28 +54,35 @@ class MySQLStorage(BaseStorage):
         async with self.pool.acquire() as conn:
             async with conn.cursor(aiomysql.DictCursor) as cursor:
                 await cursor.execute(
-                    "SELECT file_ext, cf_url, cf_uploaded FROM image_assets WHERE image_hash = %s",
+                    "SELECT image_hash, file_ext, file_size, cf_url, cf_uploaded FROM image_assets WHERE image_hash = %s",
                     (sha256_hash,)
                 )
-                result = await cursor.fetchone()
-                return result
+                row = await cursor.fetchone()
+                if row:
+                    row['cf_uploaded'] = bool(row['cf_uploaded'])
+                    return row
+                return None
 
     async def save_image_record(self, image_hash: str, file_ext: str, file_size: int, cf_url: Optional[str], cf_uploaded: bool) -> None:
         async with self.pool.acquire() as conn:
             async with conn.cursor() as cursor:
-                cf_upload_time = datetime.datetime.now() if cf_uploaded else None
                 await cursor.execute("""
-                    INSERT INTO image_assets (image_hash, file_ext, file_size, cf_url, cf_uploaded, cf_upload_time, created_time)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    INSERT INTO image_assets (image_hash, file_ext, file_size, cf_url, cf_uploaded, created_time)
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                    ON DUPLICATE KEY UPDATE 
+                        file_ext = VALUES(file_ext),
+                        file_size = VALUES(file_size),
+                        cf_url = VALUES(cf_url),
+                        cf_uploaded = VALUES(cf_uploaded)
                 """, (
                     image_hash,
                     file_ext,
                     file_size,
                     cf_url,
                     1 if cf_uploaded else 0,
-                    cf_upload_time,
                     datetime.datetime.now()
                 ))
+                await conn.commit()
 
     async def update_image_cf_status(self, image_hash: str, cf_url: Optional[str], cf_uploaded: bool) -> None:
         async with self.pool.acquire() as conn:
@@ -91,16 +98,20 @@ class MySQLStorage(BaseStorage):
                     cf_upload_time,
                     image_hash
                 ))
+                await conn.commit()
 
-    async def save_message(self, message_id: str, platform_type: str, self_id: str, session_id: str, group_id: Optional[str], sender_data: dict, message_str: str, raw_message: dict, image_hashes: list, timestamp: int) -> None:
+    async def save_message(self, message_id: str, platform_type: str, self_id: str, 
+                           session_id: str, group_id: Optional[str], sender_data: dict, 
+                           message_str: str, raw_message: dict, image_hashes: list, 
+                           timestamp: int, forward_data: Optional[list] = None) -> None:
         dt_object = datetime.datetime.fromtimestamp(timestamp)
         async with self.pool.acquire() as conn:
             async with conn.cursor() as cursor:
                 await cursor.execute("""
                     INSERT INTO messages (message_id, platform_type, self_id, session_id, group_id,
-                                          sender, message_str, raw_message, image_ids, timestamp,
+                                          sender, message_str, raw_message, image_ids, forward_data, timestamp,
                                           created_time)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """, (
                     message_id,
                     platform_type,
@@ -111,9 +122,11 @@ class MySQLStorage(BaseStorage):
                     message_str,
                     json.dumps(raw_message),
                     json.dumps(image_hashes),
+                    json.dumps(forward_data) if forward_data else None,
                     timestamp,
                     dt_object
                 ))
+                await conn.commit()
 
     async def get_sessions(self) -> list[dict]:
         async with self.pool.acquire() as conn:
@@ -129,20 +142,47 @@ class MySQLStorage(BaseStorage):
                     GROUP BY m1.session_id
                     ORDER BY m1.timestamp DESC
                 """)
-                return await cursor.fetchall()
+                rows = await cursor.fetchall()
+                sessions = []
+                for row in rows:
+                    sessions.append({
+                        'session_id': row['session_id'],
+                        'group_id': row['group_id'],
+                        'sender': json.loads(row['sender']),
+                        'message_str': row['message_str'],
+                        'timestamp': row['timestamp']
+                    })
+                return sessions
 
     async def get_messages(self, session_id: str, page: int = 1, page_size: int = 20) -> list[dict]:
         offset = (page - 1) * page_size
         async with self.pool.acquire() as conn:
             async with conn.cursor(aiomysql.DictCursor) as cursor:
+                # 使用嵌套查询来实现倒序 LIMIT 但正序展示
                 await cursor.execute("""
                     SELECT * FROM (
                         SELECT message_id, platform_type, self_id, session_id, group_id, 
-                               sender, message_str, raw_message, image_ids, timestamp 
+                               sender, message_str, raw_message, image_ids, forward_data, timestamp 
                         FROM messages 
                         WHERE session_id = %s 
                         ORDER BY timestamp DESC 
                         LIMIT %s OFFSET %s
-                    ) sub ORDER BY timestamp ASC
+                    ) AS t ORDER BY timestamp ASC
                 """, (session_id, page_size, offset))
-                return await cursor.fetchall()
+                rows = await cursor.fetchall()
+                messages = []
+                for row in rows:
+                    messages.append({
+                        'message_id': row['message_id'],
+                        'platform_type': row['platform_type'],
+                        'self_id': row['self_id'],
+                        'session_id': row['session_id'],
+                        'group_id': row['group_id'],
+                        'sender': json.loads(row['sender']),
+                        'message_str': row['message_str'],
+                        'raw_message': json.loads(row['raw_message']),
+                        'image_ids': json.loads(row['image_ids']),
+                        'forward_data': json.loads(row['forward_data']) if row['forward_data'] else None,
+                        'timestamp': row['timestamp']
+                    })
+                return messages

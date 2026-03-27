@@ -11,7 +11,8 @@ from astrbot import logger
 from astrbot.api.event import filter, AstrMessageEvent
 from astrbot.api.star import Context, Star, register
 from astrbot.api import AstrBotConfig
-from astrbot.api.message_components import Image
+from astrbot.api.message_components import Image, Forward
+from astrbot.core.platform.sources.aiocqhttp.aiocqhttp_platform_adapter import AiocqhttpAdapter
 
 
 from .database import MySQLStorage, SQLiteStorage, BaseStorage
@@ -426,12 +427,12 @@ class MySQLPlugin(Star):
             msg = event.message_obj
             meta = event.platform_meta
 
-            # 收集所有图片的 Hash
+            # 收集所有图片的 Hash 和 转发消息数据
             image_hashes = []
+            forward_data = None
 
-            # 判断是否需要处理图片
-            need_process = self.is_save_image or self.storage_mode in ["cloudflare", "both"]
-            if need_process and self.storage:
+            # 判断是否需要处理图片或转发消息
+            if self.storage:
                 for component in msg.message:
                     if isinstance(component, Image):
                         if component.url:
@@ -439,6 +440,23 @@ class MySQLPlugin(Star):
                             img_hash = await self._process_image(component.url)
                             if img_hash:
                                 image_hashes.append(img_hash)
+                    elif isinstance(component, Forward):
+                        # 处理转发消息
+                        try:
+                            adapter = self.context.get_platform_adapter_by_name(event.bot_id)
+                            if isinstance(adapter, AiocqhttpAdapter):
+                                # 获取转发详情
+                                nodes_res = await adapter.bot.call_action("get_forward_msg", message_id=component.id)
+                                if nodes_res and "messages" in nodes_res:
+                                    forward_data = []
+                                    for node in nodes_res["messages"]:
+                                        # 简化节点信息用于展示
+                                        forward_data.append({
+                                            "sender": node.get("sender", {}).get("nickname", "未知"),
+                                            "content": node.get("message", "[未知内容]")
+                                        })
+                        except Exception as fe:
+                            logger.error(f"获取转发消息详情失败: {fe}")
 
             # 准备插入数据
             sender_data = {
@@ -458,6 +476,7 @@ class MySQLPlugin(Star):
                     message_str=event.message_str,
                     raw_message=msg.raw_message,
                     image_hashes=image_hashes,
+                    forward_data=forward_data,
                     timestamp=msg.timestamp
                 )
 

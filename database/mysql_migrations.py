@@ -5,7 +5,7 @@ from astrbot import logger
 class MigrationManager:
     def __init__(self, pool: aiomysql.Pool):
         self.pool = pool
-        self.target_version = 5 # 当前代码支持的最高版本
+        self.target_version = 6 # 当前代码支持的最高版本
 
     async def get_current_version(self) -> int:
         async with self.pool.acquire() as conn:
@@ -94,6 +94,7 @@ class MigrationManager:
                 message_str   TEXT         NOT NULL,
                 raw_message   LONGTEXT,
                 image_ids     JSON,
+                forward_data  JSON,
                 timestamp     INT          NOT NULL,
                 created_time  DATETIME     NOT NULL
             )
@@ -105,18 +106,6 @@ class MigrationManager:
         await cursor.execute("SHOW COLUMNS FROM image_assets LIKE 'file_ext'")
         if not await cursor.fetchone():
              await cursor.execute("ALTER TABLE image_assets ADD COLUMN file_ext VARCHAR(10) AFTER image_hash")
-        
-        # 2. 存量数据提取后缀名
-        # 通过 SQL 提取最后一个点之后的字符作为后缀
-        # 注意：这里假设 file_path 存在且包含有效的扩展名
-        await cursor.execute("""
-            UPDATE image_assets 
-            SET file_ext = CONCAT('.', SUBSTRING_INDEX(file_path, '.', -1))
-            WHERE file_ext IS NULL AND file_path IS NOT NULL AND file_path LIKE '%.%';
-        """)
-        
-        # 3. 如果依然有 NULL（比如文件没后缀），设置默认值
-        await cursor.execute("UPDATE image_assets SET file_ext = '.jpg' WHERE file_ext IS NULL")
 
     async def _migration_v3(self, cursor):
         """彻底移除遗留的 file_path 字段以解耦绝对路径"""
@@ -146,3 +135,9 @@ class MigrationManager:
                 ADD COLUMN cf_uploaded TINYINT(1) DEFAULT 0 AFTER cf_url,
                 ADD COLUMN cf_upload_time DATETIME NULL AFTER cf_uploaded
             """)
+
+    async def _migration_v6(self, cursor):
+        """新增 forward_data 字段"""
+        await cursor.execute("SHOW COLUMNS FROM messages LIKE 'forward_data'")
+        if not await cursor.fetchone():
+            await cursor.execute("ALTER TABLE messages ADD COLUMN forward_data JSON AFTER image_ids")
