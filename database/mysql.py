@@ -119,10 +119,15 @@ class MySQLStorage(BaseStorage):
         async with self.pool.acquire() as conn:
             async with conn.cursor(aiomysql.DictCursor) as cursor:
                 await cursor.execute("""
-                    SELECT session_id, group_id, sender, message_str, timestamp 
-                    FROM messages 
-                    WHERE id IN (SELECT MAX(id) FROM messages GROUP BY session_id)
-                    ORDER BY timestamp DESC
+                    SELECT m1.session_id, m1.group_id, m1.sender, m1.message_str, m1.timestamp 
+                    FROM messages m1
+                    JOIN (
+                        SELECT session_id, MAX(timestamp) as max_ts
+                        FROM messages
+                        GROUP BY session_id
+                    ) m2 ON m1.session_id = m2.session_id AND m1.timestamp = m2.max_ts
+                    GROUP BY m1.session_id
+                    ORDER BY m1.timestamp DESC
                 """)
                 return await cursor.fetchall()
 

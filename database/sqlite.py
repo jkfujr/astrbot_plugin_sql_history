@@ -111,7 +111,7 @@ class SQLiteStorage(BaseStorage):
         async with self.conn.execute("""
             SELECT session_id, group_id, sender, message_str, timestamp 
             FROM messages 
-            WHERE id IN (SELECT MAX(id) FROM messages GROUP BY session_id)
+            WHERE rowid IN (SELECT MAX(rowid) FROM messages GROUP BY session_id)
             ORDER BY timestamp DESC
         """) as cursor:
             cursor.row_factory = aiosqlite.Row
