@@ -118,13 +118,18 @@ class SQLiteStorage(BaseStorage):
             rows = await cursor.fetchall()
             return [dict(row) for row in rows]
 
-    async def get_messages(self, session_id: str, limit: int, offset: int) -> list[dict]:
+    async def get_messages(self, session_id: str, page: int = 1, page_size: int = 20) -> list[dict]:
+        offset = (page - 1) * page_size
         async with self.conn.execute("""
-            SELECT * FROM messages 
-            WHERE session_id = ? 
-            ORDER BY timestamp ASC 
-            LIMIT ? OFFSET ?
-        """, (session_id, limit, offset)) as cursor:
+            SELECT * FROM (
+                SELECT message_id, platform_type, self_id, session_id, group_id, 
+                       sender, message_str, raw_message, image_ids, timestamp 
+                FROM messages 
+                WHERE session_id = ? 
+                ORDER BY timestamp DESC 
+                LIMIT ? OFFSET ?
+            ) sub ORDER BY timestamp ASC
+        """, (session_id, page_size, offset)) as cursor:
             cursor.row_factory = aiosqlite.Row
             rows = await cursor.fetchall()
             return [dict(row) for row in rows]
