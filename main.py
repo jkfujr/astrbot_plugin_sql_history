@@ -4,6 +4,7 @@ import aiohttp
 import aiofiles
 import hashlib
 import datetime
+import traceback
 from pathlib import Path
 from typing import Optional
 
@@ -19,7 +20,7 @@ from .database import MySQLStorage, SQLiteStorage, BaseStorage
 from .webui import WebUIServer
 
 
-@register("astrbot_plugin_sql_history", "LW&jkfujr", "MySQL日志(Hash去重版)", "1.2.0")
+@register("astrbot_plugin_sql_history", "LW&jkfujr", "MySQL日志(Hash去重版)", "1.2.1")
 class MySQLPlugin(Star):
     def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context)
@@ -58,6 +59,7 @@ class MySQLPlugin(Star):
 
     async def initialize(self):
         logger.info("正在初始化 astrbot_plugin_sql_history 插件...")
+        logger.info(f"插件入口文件: {__file__}")
 
         db_conf = self.config.get("database", {})
         db_type = db_conf.get("db_type", "sqlite")
@@ -99,6 +101,7 @@ class MySQLPlugin(Star):
 
         except Exception as e:
             logger.error(f"插件初始化失败: {str(e)}")
+            logger.error(traceback.format_exc())
             raise
 
     async def _upload_to_cf_imgbed(self, img_data: bytes, sha256_hash: str, file_ext: str) -> Optional[str]:
