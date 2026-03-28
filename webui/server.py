@@ -78,8 +78,8 @@ class WebUIServer:
         return dependency
 
     def _setup_routes(self):
-        static_dir = Path(__file__).resolve().parent.parent / "static"
-        
+        static_dir = Path(Path(__file__).resolve().parent.parent) / "static"
+
         self._app.add_middleware(
             CORSMiddleware,
             allow_origins=["*"],
@@ -89,15 +89,15 @@ class WebUIServer:
 
         if static_dir.exists():
             # 挂载 assets 目录在 /assets 路径下，因为 index.html 引用的是 /assets/
-            assets_dir = static_dir / "assets"
+            assets_dir = Path(static_dir) / "assets"
             if assets_dir.exists():
                 self._app.mount("/assets", StaticFiles(directory=str(assets_dir)), name="assets")
             # 同时也保留根路径 index.html 的手动提供，或者挂载整个 static 到根（放在最后）
             # 但为了不影响 /api，我们手动处理 / 并在 assets 目录下挂载
-            
+
+        index_path = Path(static_dir) / "index.html"
         @self._app.get("/", response_class=HTMLResponse)
         async def serve_index():
-            index_path = static_dir / "index.html"
             if not index_path.exists():
                 return HTMLResponse("Frontend files not found. Please build the frontend first.")
             return HTMLResponse(index_path.read_text(encoding="utf-8"))
@@ -130,9 +130,9 @@ class WebUIServer:
                 local_path = Path(self.image_save_path) / f"{image_hash}{ext}"
                 if local_path.exists():
                     return FileResponse(local_path)
-                
+
                 # 2. 本地没有，尝试图床
                 if info.get('cf_url'):
                     return RedirectResponse(info['cf_url'])
-            
+
             raise HTTPException(status_code=404, detail="图片不存在")
