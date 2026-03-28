@@ -346,7 +346,7 @@ class MySQLPlugin(Star):
                     if self.is_save_image:
                         found = False
                         for ext in ['.jpg', '.png', '.gif', '.webp']:
-                            local_path = Path(self.image_save_path) / f"{sha256_hash}{ext}"
+                            local_path = Path(self.image_save_path).joinpath(f"{sha256_hash}{ext}")
                             if local_path.exists():
                                 async with aiofiles.open(local_path, mode='rb') as f:
                                     img_data = await f.read()
@@ -395,7 +395,7 @@ class MySQLPlugin(Star):
             if need_local:
                 # 使用 Hash 作为文件名
                 file_name = f"{sha256_hash}{file_ext}"
-                save_path = Path(self.image_save_path) / file_name
+                save_path = Path(self.image_save_path).joinpath(file_name)
                 # 写入磁盘
                 async with aiofiles.open(save_path, mode='wb') as f:
                     await f.write(img_data)

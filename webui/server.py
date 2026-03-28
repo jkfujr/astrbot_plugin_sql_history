@@ -78,7 +78,7 @@ class WebUIServer:
         return dependency
 
     def _setup_routes(self):
-        static_dir = Path(Path(__file__).resolve().parent.parent) / "static"
+        static_dir = Path(__file__).resolve().parent.parent.joinpath("static")
 
         self._app.add_middleware(
             CORSMiddleware,
@@ -89,13 +89,13 @@ class WebUIServer:
 
         if static_dir.exists():
             # 挂载 assets 目录在 /assets 路径下，因为 index.html 引用的是 /assets/
-            assets_dir = Path(static_dir) / "assets"
+            assets_dir = Path(static_dir).joinpath("assets")
             if assets_dir.exists():
                 self._app.mount("/assets", StaticFiles(directory=str(assets_dir)), name="assets")
             # 同时也保留根路径 index.html 的手动提供，或者挂载整个 static 到根（放在最后）
             # 但为了不影响 /api，我们手动处理 / 并在 assets 目录下挂载
 
-        index_path = Path(static_dir) / "index.html"
+        index_path = Path(static_dir).joinpath("index.html")
         @self._app.get("/", response_class=HTMLResponse)
         async def serve_index():
             if not index_path.exists():
@@ -127,7 +127,7 @@ class WebUIServer:
             info = await self.storage.get_image_info(image_hash)
             if info:
                 ext = info.get('file_ext', '.jpg')
-                local_path = Path(self.image_save_path) / f"{image_hash}{ext}"
+                local_path = Path(self.image_save_path).joinpath(f"{image_hash}{ext}")
                 if local_path.exists():
                     return FileResponse(local_path)
 
