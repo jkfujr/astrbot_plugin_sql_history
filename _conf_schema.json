@@ -61,104 +61,101 @@
         "default": "data/plugin_data/astrbot_plugin_sql_history/image",
         "hint": "建议存放在 data/plugin_data 目录下防止丢失，插件将会自动基于此目录创建并持久化文件"
       },
-      "storage_mode": {
-        "description": "图像存储模式",
-        "type": "string",
-        "default": "local",
-        "options": [
-          "local",
-          "local+cloudflare",
-          "local+imgbed",
-          "cloudflare",
-          "imgbed"
-        ],
-        "hint": "选择图片存储方式：仅本地(local) / 本地+CloudFlare-ImgBed(local+cloudflare) / 本地+ImgBed(local+imgbed) / 仅CloudFlare-ImgBed(cloudflare) / 仅ImgBed(imgbed)"
-      },
-      "imgbed_type": {
-        "description": "图床类型",
-        "type": "string",
-        "default": "cloudflare",
-        "options": [
-          "CloudFlare-ImgBed",
-          "ImgBed"
-        ],
-        "hint": "选择使用的图床系统"
-      },
-      "auto_reupload_old": {
-        "description": "自动补传旧图",
-        "type": "bool",
-        "default": true,
-        "hint": "检测到数据库中已存在但未上传到CF的旧图时，是否自动补传。开启后切换存储模式时，新消息中遇到的旧图会自动补传到图床"
-      },
-      "cf_api_endpoint": {
-        "description": "[CloudFlare] API端点地址",
-        "type": "string",
-        "default": "",
-        "hint": "CloudFlare ImgBed 服务的完整地址，例如 https://img.example.com"
-      },
-      "cf_api_token": {
-        "description": "[CloudFlare] API Token",
-        "type": "string",
-        "default": "",
-        "hint": "CloudFlare ImgBed 生成的 API Token，需要 upload 权限"
-      },
-      "cf_channel_mode": {
-        "description": "[CloudFlare] 渠道选择模式",
-        "type": "string",
-        "default": "manual",
-        "options": [
-          "manual",
-          "auto"
-        ],
-        "hint": "manual: 手动指定上传渠道；auto: 自动从/api/channels获取可用渠道，轮询负载均衡"
-      },
-      "cf_upload_channel": {
-        "description": "[CloudFlare] 手动指定上传渠道",
-        "type": "string",
-        "default": "telegram",
-        "hint": "存储渠道：telegram、cfr2、s3、discord、huggingface。channel_mode=manual 时生效"
-      },
-      "cf_server_compress": {
-        "description": "[CloudFlare] 服务端压缩",
-        "type": "bool",
-        "default": true,
-        "hint": "是否开启服务端图片压缩"
-      },
-      "cf_return_full_url": {
-        "description": "[CloudFlare] 返回完整URL",
-        "type": "bool",
-        "default": true,
-        "hint": "是否返回完整的图片URL（否则只返回路径部分）"
-      },
-      "cf_upload_folder": {
-        "description": "[CloudFlare] 上传目录",
-        "type": "string",
-        "default": "QQ",
-        "hint": "上传到图床的哪个目录，使用相对路径，例如 QQ、images/chat。留空表示上传到根目录"
-      },
-      "imgbed_api_endpoint": {
-        "description": "[ImgBed] API端点地址",
-        "type": "string",
-        "default": "",
-        "hint": "ImgBed 服务的完整地址，例如 http://localhost:13000"
-      },
-      "imgbed_username": {
-        "description": "[ImgBed] 用户名",
-        "type": "string",
-        "default": "admin",
-        "hint": "ImgBed 登录用户名"
-      },
-      "imgbed_password": {
-        "description": "[ImgBed] 密码",
-        "type": "string",
-        "default": "",
-        "hint": "ImgBed 登录密码"
-      },
-      "imgbed_upload_directory": {
-        "description": "[ImgBed] 上传目录",
-        "type": "string",
-        "default": "/QQ",
-        "hint": "上传到图床的哪个目录，例如 /QQ、/photos。留空表示上传到根目录"
+      "remote": {
+        "description": "远端图床配置",
+        "type": "object",
+        "hint": "用于控制是否启用远端图床，以及共享的服务地址、上传目录和旧图补传行为",
+        "items": {
+          "provider": {
+            "description": "远端存储提供方",
+            "type": "string",
+            "default": "none",
+            "options": [
+              "none",
+              "cloudflare",
+              "imgbed"
+            ],
+            "hint": "none: 不启用远端图床；cloudflare: 使用 CloudFlare-ImgBed；imgbed: 使用 ImgBed"
+          },
+          "api_endpoint": {
+            "description": "API端点地址",
+            "type": "string",
+            "default": "",
+            "hint": "远端图床服务的完整地址，例如 https://img.example.com 或 http://localhost:13000"
+          },
+          "upload_directory": {
+            "description": "上传目录",
+            "type": "string",
+            "default": "QQ",
+            "hint": "共享上传目录。CloudFlare 使用相对路径，例如 QQ、images/chat；ImgBed 会自动补成 /QQ、/images/chat。留空表示上传到根目录"
+          },
+          "auto_reupload_old": {
+            "description": "自动补传旧图",
+            "type": "bool",
+            "default": true,
+            "hint": "检测到数据库中已存在但尚未上传到远端图床的旧图时，是否自动补传。仅在启用远端图床时生效"
+          },
+          "cloudflare": {
+            "description": "CloudFlare 高级设置",
+            "type": "object",
+            "hint": "CloudFlare-ImgBed 专属配置，仅在 provider=cloudflare 时生效",
+            "items": {
+              "api_token": {
+                "description": "API Token",
+                "type": "string",
+                "default": "",
+                "hint": "CloudFlare ImgBed 生成的 API Token，需要 upload 权限"
+              },
+              "channel_mode": {
+                "description": "渠道选择模式",
+                "type": "string",
+                "default": "manual",
+                "options": [
+                  "manual",
+                  "auto"
+                ],
+                "hint": "manual: 手动指定上传渠道；auto: 自动从 /api/channels 获取可用渠道并轮询负载均衡"
+              },
+              "upload_channel": {
+                "description": "手动指定上传渠道",
+                "type": "string",
+                "default": "telegram",
+                "hint": "存储渠道：telegram、cfr2、s3、discord、huggingface。channel_mode=manual 时生效"
+              },
+              "server_compress": {
+                "description": "服务端压缩",
+                "type": "bool",
+                "default": true,
+                "hint": "是否开启服务端图片压缩"
+              },
+              "return_full_url": {
+                "description": "返回完整URL",
+                "type": "bool",
+                "default": true,
+                "hint": "是否返回完整的图片URL（否则只返回路径部分）"
+              }
+            }
+          },
+          "imgbed": {
+            "description": "ImgBed 认证设置",
+            "type": "object",
+            "hint": "ImgBed 专属认证配置，仅在 provider=imgbed 时生效",
+            "items": {
+              "username": {
+                "description": "用户名",
+                "type": "string",
+                "default": "admin",
+                "hint": "ImgBed 登录用户名"
+              },
+              "password": {
+                "description": "密码",
+                "type": "string",
+                "default": "",
+                "hint": "ImgBed 登录密码"
+              }
+            }
+          }
+        }
       }
     }
   },
