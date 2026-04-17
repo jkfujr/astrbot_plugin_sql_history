@@ -7,6 +7,7 @@ import datetime
 import traceback
 from pathlib import Path
 from typing import Optional
+from urllib.parse import urlparse
 
 from astrbot import logger
 from astrbot.api.event import filter, AstrMessageEvent
@@ -122,6 +123,46 @@ class MySQLPlugin(Star):
         if remote_url.startswith("/"):
             return f"{base_url}{remote_url}"
         return f"{base_url}/{remote_url}"
+
+    def _extract_remote_endpoint_from_url(self, remote_url: str) -> str:
+        """从绝对图片 URL 中提取服务端点，用于比对当前图床配置。"""
+        remote_url = str(remote_url or "").strip()
+        if not remote_url:
+            return ""
+
+        parsed = urlparse(remote_url)
+        if not parsed.scheme or not parsed.netloc:
+            return ""
+        return f"{parsed.scheme}://{parsed.netloc}".rstrip("/")
+
+    def _get_record_remote_target(self, img_info: dict) -> tuple[str, str]:
+        """获取图片记录关联的远端图床目标。"""
+        record_provider = str(img_info.get("remote_provider") or "").strip().lower()
+        record_endpoint = self._normalize_api_endpoint(
+            str(img_info.get("remote_endpoint") or "")
+        ).lower()
+
+        if not record_endpoint:
+            record_endpoint = self._extract_remote_endpoint_from_url(
+                img_info.get("remote_url")
+            ).lower()
+
+        return record_provider, record_endpoint
+
+    def _is_current_remote_target(self, img_info: dict) -> bool:
+        """判断数据库中的远端记录是否属于当前配置的图床目标。"""
+        if self.remote_provider == "none":
+            return True
+
+        current_provider = str(self.remote_provider or "").strip().lower()
+        current_endpoint = self._normalize_api_endpoint(self.remote_api_endpoint).lower()
+        record_provider, record_endpoint = self._get_record_remote_target(img_info)
+
+        if record_provider and record_provider != current_provider:
+            return False
+        if record_endpoint and current_endpoint and record_endpoint != current_endpoint:
+            return False
+        return True
 
     def _is_likely_image_bytes(self, data: bytes) -> bool:
         """基于文件头判断是否像图片。"""
@@ -542,26 +583,41 @@ class MySQLPlugin(Star):
                 remote_missing_detected = False
 
                 if remote_uploaded:
-                    if sha256_hash in self._verified_remote_hashes:
-                        logger.debug(f"图片已存在且远端已校验通过，Hash: {sha256_hash}")
-                        return sha256_hash
+                    if not self._is_current_remote_target(img_info):
+                        record_provider, record_endpoint = self._get_record_remote_target(img_info)
+                        remote_missing_detected = True
+                        remote_uploaded = False
+                        img_info = dict(img_info)
+                        img_info['remote_uploaded'] = False
+                        img_info['remote_url'] = None
+                        self._verified_remote_hashes.discard(sha256_hash)
+                        logger.warning(
+                            f"图片远端记录与当前图床配置不一致，将按未上传处理: Hash={sha256_hash}, "
+                            f"记录={record_provider or 'unknown'}@{record_endpoint or 'unknown'}, "
+                            f"当前={self.remote_provider}@{self.remote_api_endpoint or 'unknown'}"
+                        )
+                    else:
+                        if sha256_hash in self._verified_remote_hashes:
+                            logger.debug(f"图片已存在且远端已校验通过，Hash: {sha256_hash}")
+                            return sha256_hash
 
-                    remote_exists = await self._check_remote_file_exists(img_info.get('remote_url'))
-                    if remote_exists is True:
-                        self._verified_remote_hashes.add(sha256_hash)
-                        logger.debug(f"图片已存在且远端文件可访问，Hash: {sha256_hash}")
-                        return sha256_hash
+                        remote_exists = await self._check_remote_file_exists(img_info.get('remote_url'))
+                        if remote_exists is True:
+                            self._verified_remote_hashes.add(sha256_hash)
+                            logger.debug(f"图片已存在且远端文件可访问，Hash: {sha256_hash}")
+                            return sha256_hash
 
-                    if remote_exists is None:
-                        logger.warning(f"无法确认远端文件是否存在，沿用数据库记录，Hash: {sha256_hash}")
-                        return sha256_hash
+                        if remote_exists is None:
+                            logger.warning(f"无法确认远端文件是否存在，沿用数据库记录，Hash: {sha256_hash}")
+                            return sha256_hash
 
-                    remote_missing_detected = True
-                    img_info = dict(img_info)
-                    img_info['remote_uploaded'] = False
-                    img_info['remote_url'] = None
-                    self._verified_remote_hashes.discard(sha256_hash)
-                    logger.warning(f"数据库记录显示图片已上传，但远端文件不存在，Hash: {sha256_hash}")
+                        remote_missing_detected = True
+                        remote_uploaded = False
+                        img_info = dict(img_info)
+                        img_info['remote_uploaded'] = False
+                        img_info['remote_url'] = None
+                        self._verified_remote_hashes.discard(sha256_hash)
+                        logger.warning(f"数据库记录显示图片已上传，但远端文件不存在，Hash: {sha256_hash}")
 
                 # 需要补传: 已存在但未上传到图床，且开启了自动补传
                 if need_remote and self.auto_reupload_old:
