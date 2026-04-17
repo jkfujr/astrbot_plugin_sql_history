@@ -123,6 +123,20 @@ class MySQLPlugin(Star):
             return f"{base_url}{remote_url}"
         return f"{base_url}/{remote_url}"
 
+    def _is_likely_image_bytes(self, data: bytes) -> bool:
+        """基于文件头判断是否像图片。"""
+        if not data:
+            return False
+        if data.startswith(b"\x89PNG"):
+            return True
+        if data.startswith(b"\xff\xd8\xff"):
+            return True
+        if data.startswith(b"GIF"):
+            return True
+        if len(data) >= 12 and data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+            return True
+        return False
+
     async def _check_remote_file_exists(self, remote_url: str) -> Optional[bool]:
         """
         检查远端图床文件是否存在。
@@ -139,11 +153,24 @@ class MySQLPlugin(Star):
             async with aiohttp.ClientSession() as session:
                 async with session.get(
                     check_url,
-                    headers={"Range": "bytes=0-0"},
+                    headers={"Range": "bytes=0-15"},
                     allow_redirects=True,
                 ) as resp:
                     if resp.status in (200, 206):
-                        return True
+                        content_type = str(resp.headers.get("Content-Type", "") or "").split(";")[0].strip().lower()
+                        preview = await resp.read()
+                        if content_type.startswith("image/") or content_type == "application/octet-stream":
+                            return True
+                        if self._is_likely_image_bytes(preview):
+                            return True
+                        if content_type in {"application/json", "text/html", "text/plain"}:
+                            logger.warning(f"远端文件检查命中非图片响应，URL: {check_url}，Content-Type: {content_type}")
+                            return False
+                        logger.warning(
+                            f"远端文件检查返回 200/206，但无法确认为图片，URL: {check_url}，"
+                            f"Content-Type: {content_type or 'unknown'}，响应前缀: {preview[:32]!r}"
+                        )
+                        return False
                     if resp.status == 404:
                         return False
                     logger.warning(f"远端文件存在性检查返回异常状态码: {resp.status}，URL: {check_url}")
@@ -511,7 +538,7 @@ class MySQLPlugin(Star):
                     logger.debug(f"图片已存在，Hash: {sha256_hash}")
                     return sha256_hash
 
-                remote_uploaded = bool(img_info.get('cf_uploaded', False) and img_info.get('cf_url'))
+                remote_uploaded = bool(img_info.get('remote_uploaded', False) and img_info.get('remote_url'))
                 remote_missing_detected = False
 
                 if remote_uploaded:
@@ -519,7 +546,7 @@ class MySQLPlugin(Star):
                         logger.debug(f"图片已存在且远端已校验通过，Hash: {sha256_hash}")
                         return sha256_hash
 
-                    remote_exists = await self._check_remote_file_exists(img_info.get('cf_url'))
+                    remote_exists = await self._check_remote_file_exists(img_info.get('remote_url'))
                     if remote_exists is True:
                         self._verified_remote_hashes.add(sha256_hash)
                         logger.debug(f"图片已存在且远端文件可访问，Hash: {sha256_hash}")
@@ -531,8 +558,8 @@ class MySQLPlugin(Star):
 
                     remote_missing_detected = True
                     img_info = dict(img_info)
-                    img_info['cf_uploaded'] = False
-                    img_info['cf_url'] = None
+                    img_info['remote_uploaded'] = False
+                    img_info['remote_url'] = None
                     self._verified_remote_hashes.discard(sha256_hash)
                     logger.warning(f"数据库记录显示图片已上传，但远端文件不存在，Hash: {sha256_hash}")
 
@@ -560,24 +587,28 @@ class MySQLPlugin(Star):
                     file_ext = img_info.get('file_ext', '.jpg')
 
                     # 根据配置上传到对应图床
-                    cf_url = await self._upload_to_remote_by_config(img_data, sha256_hash, file_ext)
+                    remote_url = await self._upload_to_remote_by_config(img_data, sha256_hash, file_ext)
 
                     # 更新数据库记录（即使失败也要更新状态）
-                    await self.storage.update_image_cf_status(
+                    await self.storage.update_image_remote_status(
                         image_hash=sha256_hash,
-                        cf_url=cf_url,
-                        cf_uploaded=cf_url is not None
+                        remote_url=remote_url,
+                        remote_uploaded=remote_url is not None,
+                        remote_provider=self.remote_provider if remote_url else None,
+                        remote_endpoint=self.remote_api_endpoint if remote_url else None
                     )
-                    if cf_url is not None:
+                    if remote_url is not None:
                         self._verified_remote_hashes.add(sha256_hash)
                     else:
                         self._verified_remote_hashes.discard(sha256_hash)
 
                 elif remote_missing_detected:
-                    await self.storage.update_image_cf_status(
+                    await self.storage.update_image_remote_status(
                         image_hash=sha256_hash,
-                        cf_url=None,
-                        cf_uploaded=False
+                        remote_url=None,
+                        remote_uploaded=False,
+                        remote_provider=None,
+                        remote_endpoint=None
                     )
 
                 return sha256_hash
@@ -594,11 +625,11 @@ class MySQLPlugin(Star):
                 file_ext = ".webp"
 
             # 先尝试上传到图床（如果需要）
-            cf_url = None
-            cf_uploaded = False
+            remote_url = None
+            remote_uploaded = False
             if need_remote:
-                cf_url = await self._upload_to_remote_by_config(img_data, sha256_hash, file_ext)
-                cf_uploaded = cf_url is not None
+                remote_url = await self._upload_to_remote_by_config(img_data, sha256_hash, file_ext)
+                remote_uploaded = remote_url is not None
 
             # 本地保存（如果需要）
             if need_local:
@@ -614,16 +645,18 @@ class MySQLPlugin(Star):
                 image_hash=sha256_hash,
                 file_ext=file_ext,
                 file_size=len(img_data),
-                cf_url=cf_url,
-                cf_uploaded=cf_uploaded
+                remote_url=remote_url,
+                remote_uploaded=remote_uploaded,
+                remote_provider=self.remote_provider if remote_uploaded else None,
+                remote_endpoint=self.remote_api_endpoint if remote_uploaded else None
             )
-            if cf_uploaded:
+            if remote_uploaded:
                 self._verified_remote_hashes.add(sha256_hash)
             else:
                 self._verified_remote_hashes.discard(sha256_hash)
 
             # 输出日志
-            if need_remote and cf_uploaded:
+            if need_remote and remote_uploaded:
                 logger.info(f"新图片已归档并上传至图床: {sha256_hash}")
             elif need_local:
                 logger.info(f"新图片已归档至本地: {sha256_hash}")

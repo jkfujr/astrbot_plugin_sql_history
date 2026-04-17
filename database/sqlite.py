@@ -38,47 +38,64 @@ class SQLiteStorage(BaseStorage):
             return bool(result)
 
     async def get_image_info(self, sha256_hash: str) -> Optional[dict]:
-        async with self.conn.execute(
-            "SELECT image_hash, file_ext, file_size, cf_url, cf_uploaded FROM image_assets WHERE image_hash = ?",
-            (sha256_hash,)
-        ) as cursor:
+        async with self.conn.execute("""
+            SELECT image_hash, file_ext, file_size, created_time,
+                   remote_url, remote_uploaded, remote_upload_time,
+                   remote_provider, remote_endpoint
+            FROM image_assets WHERE image_hash = ?
+        """, (sha256_hash,)) as cursor:
             row = await cursor.fetchone()
             if row:
                 return {
                     'image_hash': row[0],
                     'file_ext': row[1],
                     'file_size': row[2],
-                    'cf_url': row[3],
-                    'cf_uploaded': bool(row[4])
+                    'created_time': row[3],
+                    'remote_url': row[4],
+                    'remote_uploaded': bool(row[5]),
+                    'remote_upload_time': row[6],
+                    'remote_provider': row[7],
+                    'remote_endpoint': row[8]
                 }
             return None
 
-    async def save_image_record(self, image_hash: str, file_ext: str, file_size: int, cf_url: Optional[str], cf_uploaded: bool) -> None:
+    async def save_image_record(self, image_hash: str, file_ext: str, file_size: int,
+                               remote_url: Optional[str], remote_uploaded: bool,
+                               remote_provider: Optional[str], remote_endpoint: Optional[str]) -> None:
         async with self.conn.cursor() as cursor:
             await cursor.execute("""
-                INSERT OR REPLACE INTO image_assets (image_hash, file_ext, file_size, cf_url, cf_uploaded, created_time)
-                VALUES (?, ?, ?, ?, ?, ?)
+                INSERT OR REPLACE INTO image_assets
+                (image_hash, file_ext, file_size, created_time,
+                 remote_url, remote_uploaded, remote_provider, remote_endpoint)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 image_hash,
                 file_ext,
                 file_size,
-                cf_url,
-                1 if cf_uploaded else 0,
-                datetime.datetime.now()
+                datetime.datetime.now(),
+                remote_url,
+                1 if remote_uploaded else 0,
+                remote_provider,
+                remote_endpoint
             ))
             await self.conn.commit()
 
-    async def update_image_cf_status(self, image_hash: str, cf_url: Optional[str], cf_uploaded: bool) -> None:
+    async def update_image_remote_status(self, image_hash: str, remote_url: Optional[str],
+                                         remote_uploaded: bool, remote_provider: Optional[str],
+                                         remote_endpoint: Optional[str]) -> None:
         async with self.conn.cursor() as cursor:
-            cf_upload_time = datetime.datetime.now() if cf_uploaded else None
+            remote_upload_time = datetime.datetime.now() if remote_uploaded else None
             await cursor.execute("""
                 UPDATE image_assets
-                SET cf_url = ?, cf_uploaded = ?, cf_upload_time = ?
+                SET remote_url = ?, remote_uploaded = ?, remote_upload_time = ?,
+                    remote_provider = ?, remote_endpoint = ?
                 WHERE image_hash = ?
             """, (
-                cf_url,
-                1 if cf_uploaded else 0,
-                cf_upload_time,
+                remote_url,
+                1 if remote_uploaded else 0,
+                remote_upload_time,
+                remote_provider,
+                remote_endpoint,
                 image_hash
             ))
             await self.conn.commit()

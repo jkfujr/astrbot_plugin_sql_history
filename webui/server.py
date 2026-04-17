@@ -132,7 +132,7 @@ class WebUIServer:
                     return FileResponse(local_path)
 
                 # 2. 本地没有，尝试图床
-                if info.get('cf_url'):
-                    return RedirectResponse(info['cf_url'])
+                if info.get('remote_url'):
+                    return RedirectResponse(info['remote_url'])
 
             raise HTTPException(status_code=404, detail="图片不存在")

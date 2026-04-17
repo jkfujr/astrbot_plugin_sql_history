@@ -53,49 +53,64 @@ class MySQLStorage(BaseStorage):
     async def get_image_info(self, sha256_hash: str) -> Optional[dict]:
         async with self.pool.acquire() as conn:
             async with conn.cursor(aiomysql.DictCursor) as cursor:
-                await cursor.execute(
-                    "SELECT image_hash, file_ext, file_size, cf_url, cf_uploaded FROM image_assets WHERE image_hash = %s",
-                    (sha256_hash,)
-                )
+                await cursor.execute("""
+                    SELECT image_hash, file_ext, file_size, created_time,
+                           remote_url, remote_uploaded, remote_upload_time,
+                           remote_provider, remote_endpoint
+                    FROM image_assets WHERE image_hash = %s
+                """, (sha256_hash,))
                 row = await cursor.fetchone()
                 if row:
-                    row['cf_uploaded'] = bool(row['cf_uploaded'])
+                    row['remote_uploaded'] = bool(row['remote_uploaded'])
                     return row
                 return None
 
-    async def save_image_record(self, image_hash: str, file_ext: str, file_size: int, cf_url: Optional[str], cf_uploaded: bool) -> None:
+    async def save_image_record(self, image_hash: str, file_ext: str, file_size: int,
+                               remote_url: Optional[str], remote_uploaded: bool,
+                               remote_provider: Optional[str], remote_endpoint: Optional[str]) -> None:
         async with self.pool.acquire() as conn:
             async with conn.cursor() as cursor:
                 await cursor.execute("""
-                    INSERT INTO image_assets (image_hash, file_ext, file_size, cf_url, cf_uploaded, created_time)
-                    VALUES (%s, %s, %s, %s, %s, %s)
-                    ON DUPLICATE KEY UPDATE 
+                    INSERT INTO image_assets
+                    (image_hash, file_ext, file_size, created_time,
+                     remote_url, remote_uploaded, remote_provider, remote_endpoint)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                    ON DUPLICATE KEY UPDATE
                         file_ext = VALUES(file_ext),
                         file_size = VALUES(file_size),
-                        cf_url = VALUES(cf_url),
-                        cf_uploaded = VALUES(cf_uploaded)
+                        remote_url = VALUES(remote_url),
+                        remote_uploaded = VALUES(remote_uploaded),
+                        remote_provider = VALUES(remote_provider),
+                        remote_endpoint = VALUES(remote_endpoint)
                 """, (
                     image_hash,
                     file_ext,
                     file_size,
-                    cf_url,
-                    1 if cf_uploaded else 0,
-                    datetime.datetime.now()
+                    datetime.datetime.now(),
+                    remote_url,
+                    1 if remote_uploaded else 0,
+                    remote_provider,
+                    remote_endpoint
                 ))
                 await conn.commit()
 
-    async def update_image_cf_status(self, image_hash: str, cf_url: Optional[str], cf_uploaded: bool) -> None:
+    async def update_image_remote_status(self, image_hash: str, remote_url: Optional[str],
+                                         remote_uploaded: bool, remote_provider: Optional[str],
+                                         remote_endpoint: Optional[str]) -> None:
         async with self.pool.acquire() as conn:
             async with conn.cursor() as cursor:
-                cf_upload_time = datetime.datetime.now() if cf_uploaded else None
+                remote_upload_time = datetime.datetime.now() if remote_uploaded else None
                 await cursor.execute("""
                     UPDATE image_assets
-                    SET cf_url = %s, cf_uploaded = %s, cf_upload_time = %s
+                    SET remote_url = %s, remote_uploaded = %s, remote_upload_time = %s,
+                        remote_provider = %s, remote_endpoint = %s
                     WHERE image_hash = %s
                 """, (
-                    cf_url,
-                    1 if cf_uploaded else 0,
-                    cf_upload_time,
+                    remote_url,
+                    1 if remote_uploaded else 0,
+                    remote_upload_time,
+                    remote_provider,
+                    remote_endpoint,
                     image_hash
                 ))
                 await conn.commit()

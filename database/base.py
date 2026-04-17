@@ -19,17 +19,21 @@ class BaseStorage(abc.ABC):
 
     @abc.abstractmethod
     async def get_image_info(self, sha256_hash: str) -> Optional[dict]:
-        """获取图片完整信息，包括cf_uploaded状态"""
+        """获取图片完整信息，包括 remote_uploaded 状态"""
         pass
 
     @abc.abstractmethod
-    async def save_image_record(self, image_hash: str, file_ext: str, file_size: int, cf_url: Optional[str], cf_uploaded: bool) -> None:
+    async def save_image_record(self, image_hash: str, file_ext: str, file_size: int,
+                               remote_url: Optional[str], remote_uploaded: bool,
+                               remote_provider: Optional[str], remote_endpoint: Optional[str]) -> None:
         """保存图片记录至数据库"""
         pass
 
     @abc.abstractmethod
-    async def update_image_cf_status(self, image_hash: str, cf_url: Optional[str], cf_uploaded: bool) -> None:
-        """更新图片CF上传状态（用于补传旧图）"""
+    async def update_image_remote_status(self, image_hash: str, remote_url: Optional[str],
+                                         remote_uploaded: bool, remote_provider: Optional[str],
+                                         remote_endpoint: Optional[str]) -> None:
+        """更新图片远端上传状态（用于补传旧图）"""
         pass
 
     @abc.abstractmethod
