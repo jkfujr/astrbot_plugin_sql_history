@@ -46,9 +46,9 @@ class MySQLPlugin(Star):
         self.remote_upload_directory = (remote_conf.get("upload_directory", "QQ") or "").strip()
         self.auto_reupload_old = remote_conf.get("auto_reupload_old", True)
 
-        # CloudFlare ImgBed 配置
+        # CloudFlare-ImgBed 配置
         self.cf_api_endpoint = self.remote_api_endpoint if self.remote_provider == "cloudflare" else ""
-        self.cf_api_token = cf_conf.get("api_token", "")
+        self.cf_api_token = str(cf_conf.get("api_token", "") or "").strip()
         self.cf_channel_mode = cf_conf.get("channel_mode", "manual")  # manual / auto
         self.cf_upload_channel = cf_conf.get("upload_channel", "telegram")
         self.cf_server_compress = cf_conf.get("server_compress", True)
@@ -57,10 +57,8 @@ class MySQLPlugin(Star):
 
         # ImgBed 配置
         self.imgbed_api_endpoint = self.remote_api_endpoint if self.remote_provider == "imgbed" else ""
-        self.imgbed_username = imgbed_conf.get("username", "admin")
-        self.imgbed_password = imgbed_conf.get("password", "")
+        self.imgbed_api_token = str(imgbed_conf.get("api_token", "") or "").strip()
         self.imgbed_upload_directory = self._normalize_imgbed_upload_directory(self.remote_upload_directory)
-        self.imgbed_token: Optional[str] = None  # 存储登录后的 token
 
         self.debug_log = adv_conf.get("debug_log", False)
 
@@ -79,7 +77,7 @@ class MySQLPlugin(Star):
         return api_endpoint.rstrip("/")
 
     def _normalize_cloudflare_upload_directory(self, upload_directory: str) -> str:
-        """CloudFlare 使用相对目录。"""
+        """CloudFlare-ImgBed 使用相对目录。"""
         upload_directory = (upload_directory or "").strip()
         return upload_directory.lstrip("/")
 
@@ -139,8 +137,8 @@ class MySQLPlugin(Star):
                 elif self.remote_provider == "imgbed":
                     if not self.imgbed_api_endpoint:
                         logger.warning("ImgBed 已启用，但API端点未配置")
-                    # 登录获取 token
-                    await self._imgbed_login()
+                    if not self.imgbed_api_token:
+                        logger.warning("ImgBed 已启用，但API Token未配置")
 
             await self._start_webui()
 
@@ -148,42 +146,6 @@ class MySQLPlugin(Star):
             logger.error(f"插件初始化失败: {str(e)}")
             logger.error(traceback.format_exc())
             raise
-
-    async def _imgbed_login(self) -> bool:
-        """
-        登录 ImgBed 获取 token
-        返回: 登录成功返回 True，失败返回 False
-        """
-        if not self.imgbed_api_endpoint or not self.imgbed_username or not self.imgbed_password:
-            logger.error("ImgBed 登录信息不完整，跳过登录")
-            return False
-
-        login_url = f"{self.imgbed_api_endpoint}/api/auth/login"
-
-        try:
-            async with aiohttp.ClientSession() as session:
-                payload = {
-                    "username": self.imgbed_username,
-                    "password": self.imgbed_password
-                }
-
-                async with session.post(login_url, json=payload) as resp:
-                    if resp.status != 200:
-                        logger.error(f"ImgBed 登录失败，状态码: {resp.status}")
-                        return False
-
-                    result = await resp.json()
-                    if result.get("code") == 0 and result.get("data", {}).get("token"):
-                        self.imgbed_token = result["data"]["token"]
-                        logger.info(f"ImgBed 登录成功，用户: {self.imgbed_username}")
-                        return True
-                    else:
-                        logger.error(f"ImgBed 登录失败: {result.get('message', '未知错误')}")
-                        return False
-
-        except Exception as e:
-            logger.error(f"ImgBed 登录异常: {str(e)}")
-            return False
 
     async def _upload_to_imgbed(self, img_data: bytes, sha256_hash: str, file_ext: str) -> Optional[str]:
         """
@@ -194,10 +156,9 @@ class MySQLPlugin(Star):
             logger.error("ImgBed API 端点未配置，跳过上传")
             return None
 
-        # 如果没有 token，先尝试登录
-        if not self.imgbed_token:
-            if not await self._imgbed_login():
-                return None
+        if not self.imgbed_api_token:
+            logger.error("ImgBed API Token 未配置，跳过上传")
+            return None
 
         upload_url = f"{self.imgbed_api_endpoint}/api/upload"
         file_name = f"{sha256_hash}{file_ext}"
@@ -205,7 +166,7 @@ class MySQLPlugin(Star):
         try:
             async with aiohttp.ClientSession() as session:
                 headers = {
-                    "Authorization": f"Bearer {self.imgbed_token}"
+                    "Authorization": f"Bearer {self.imgbed_api_token}"
                 }
 
                 # 构建 form data
@@ -218,18 +179,8 @@ class MySQLPlugin(Star):
 
                 async with session.post(upload_url, headers=headers, data=form) as resp:
                     if resp.status == 401:
-                        # token 可能过期，重新登录
-                        logger.warning("ImgBed token 可能已过期，尝试重新登录")
-                        if await self._imgbed_login():
-                            # 重新上传
-                            headers["Authorization"] = f"Bearer {self.imgbed_token}"
-                            async with session.post(upload_url, headers=headers, data=form) as retry_resp:
-                                if retry_resp.status != 200:
-                                    logger.error(f"ImgBed 上传失败（重试后），状态码: {retry_resp.status}")
-                                    return None
-                                result = await retry_resp.json()
-                        else:
-                            return None
+                        logger.error("ImgBed API Token 无效或已失效")
+                        return None
                     elif resp.status != 200:
                         logger.error(f"ImgBed 上传失败，状态码: {resp.status}")
                         return None
@@ -251,11 +202,11 @@ class MySQLPlugin(Star):
 
     async def _upload_to_cf_imgbed(self, img_data: bytes, sha256_hash: str, file_ext: str) -> Optional[str]:
         """
-        上传图片到 CloudFlare ImgBed
+        上传图片到 CloudFlare-ImgBed
         返回: 上传成功返回图片URL，失败返回 None
         """
         if not self.cf_api_endpoint:
-            logger.error("CloudFlare ImgBed API 端点未配置，跳过上传")
+            logger.error("CloudFlare-ImgBed API 端点未配置，跳过上传")
             return None
 
         # 构建上传URL
@@ -276,7 +227,7 @@ class MySQLPlugin(Star):
                 params['channelName'] = channel_name
                 
             # auto模式下同时传递 uploadChannel 和 channelName
-            logger.info(f"CF图床轮询选择渠道: [{channel_name}] (类型: {upload_channel}, 索引: {self._round_robin_index}/{len(self._available_channels)})")
+            logger.info(f"CloudFlare-ImgBed 轮询选择渠道: [{channel_name}] (类型: {upload_channel}, 索引: {self._round_robin_index}/{len(self._available_channels)})")
         else:
             params['uploadChannel'] = self.cf_upload_channel
         # 添加上传目录
@@ -305,25 +256,25 @@ class MySQLPlugin(Star):
 
                 async with session.post(upload_url, params=params, headers=headers, data=form) as resp:
                     if resp.status != 200:
-                        logger.error(f"CF图床上传失败，状态码: {resp.status}")
+                        logger.error(f"CloudFlare-ImgBed 上传失败，状态码: {resp.status}")
                         return None
 
                     # 解析响应: [{"src": "/file/abc123.jpg"}]
                     result = await resp.json()
                     if not result or not isinstance(result, list) or len(result) == 0:
-                        logger.error("CF图床返回空响应或响应格式错误")
+                        logger.error("CloudFlare-ImgBed 返回空响应或响应格式错误")
                         return None
 
                     image_url = result[0].get('src')
                     if not image_url:
-                        logger.error("CF图床响应中未找到src字段")
+                        logger.error("CloudFlare-ImgBed 响应中未找到 src 字段")
                         return None
 
-                    logger.info(f"图片成功上传至CF图床: {sha256_hash} -> {image_url}")
+                    logger.info(f"图片成功上传至 CloudFlare-ImgBed: {sha256_hash} -> {image_url}")
                     return image_url
 
         except Exception as e:
-            logger.error(f"CF图床上传异常 {sha256_hash}: {str(e)}")
+            logger.error(f"CloudFlare-ImgBed 上传异常 {sha256_hash}: {str(e)}")
             return None
 
     async def _fetch_available_channels(self) -> None:
@@ -359,7 +310,7 @@ class MySQLPlugin(Star):
 
                     available = []
                     if isinstance(channels_data, dict):
-                        # CloudFlare ImgBed 实际返回格式: 按类型分组的字典
+                        # CloudFlare-ImgBed 实际返回格式: 按类型分组的字典
                         # { 'telegram': [{'name': 'xxx', 'type': 'TelegramNew'}], 's3': [...], ... }
                         if self.debug_log:
                             logger.debug(f"检测到分组字典格式，共 {len(channels_data)} 个类型分组")

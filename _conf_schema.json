@@ -87,7 +87,7 @@
             "description": "上传目录",
             "type": "string",
             "default": "QQ",
-            "hint": "共享上传目录。CloudFlare 使用相对路径，例如 QQ、images/chat；ImgBed 会自动补成 /QQ、/images/chat。留空表示上传到根目录"
+            "hint": "共享上传目录。CloudFlare-ImgBed 使用相对路径，例如 QQ、images/chat；ImgBed 会自动补成 /QQ、/images/chat。留空表示上传到根目录"
           },
           "auto_reupload_old": {
             "description": "自动补传旧图",
@@ -96,7 +96,7 @@
             "hint": "检测到数据库中已存在但尚未上传到远端图床的旧图时，是否自动补传。仅在启用远端图床时生效"
           },
           "cloudflare": {
-            "description": "CloudFlare 高级设置",
+            "description": "CloudFlare-ImgBed 高级设置",
             "type": "object",
             "hint": "CloudFlare-ImgBed 专属配置，仅在 provider=cloudflare 时生效",
             "items": {
@@ -104,7 +104,7 @@
                 "description": "API Token",
                 "type": "string",
                 "default": "",
-                "hint": "CloudFlare ImgBed 生成的 API Token，需要 upload 权限"
+                "hint": "CloudFlare-ImgBed 生成的 API Token，需要 upload 权限"
               },
               "channel_mode": {
                 "description": "渠道选择模式",
@@ -141,17 +141,11 @@
             "type": "object",
             "hint": "ImgBed 专属认证配置，仅在 provider=imgbed 时生效",
             "items": {
-              "username": {
-                "description": "用户名",
-                "type": "string",
-                "default": "admin",
-                "hint": "ImgBed 登录用户名"
-              },
-              "password": {
-                "description": "密码",
+              "api_token": {
+                "description": "API Token",
                 "type": "string",
                 "default": "",
-                "hint": "ImgBed 登录密码"
+                "hint": "ImgBed 生成的 API Token，用于 Bearer Token 认证"
               }
             }
           }
