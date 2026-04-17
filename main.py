@@ -90,6 +90,17 @@ class MySQLPlugin(Star):
             return upload_directory
         return f"/{upload_directory}"
 
+    def _get_upload_content_type(self, file_ext: str) -> str:
+        """根据文件后缀生成上传时使用的 MIME 类型。"""
+        ext = (file_ext or "").lower()
+        if ext == ".png":
+            return "image/png"
+        if ext == ".gif":
+            return "image/gif"
+        if ext == ".webp":
+            return "image/webp"
+        return "image/jpeg"
+
     async def initialize(self):
         logger.info("正在初始化 astrbot_plugin_sql_history 插件...")
         logger.info(f"插件入口文件: {__file__}")
@@ -171,7 +182,12 @@ class MySQLPlugin(Star):
 
                 # 构建 form data
                 form = aiohttp.FormData()
-                form.add_field('file', img_data, filename=file_name)
+                form.add_field(
+                    'file',
+                    img_data,
+                    filename=file_name,
+                    content_type=self._get_upload_content_type(file_ext)
+                )
 
                 # 添加目录参数
                 if self.imgbed_upload_directory and self.imgbed_upload_directory.strip():
@@ -182,7 +198,8 @@ class MySQLPlugin(Star):
                         logger.error("ImgBed API Token 无效或已失效")
                         return None
                     elif resp.status != 200:
-                        logger.error(f"ImgBed 上传失败，状态码: {resp.status}")
+                        error_text = await resp.text()
+                        logger.error(f"ImgBed 上传失败，状态码: {resp.status}，响应: {error_text[:500]}")
                         return None
                     else:
                         result = await resp.json()
@@ -252,11 +269,17 @@ class MySQLPlugin(Star):
 
                 # 构建 form data
                 form = aiohttp.FormData()
-                form.add_field('file', img_data, filename=file_name)
+                form.add_field(
+                    'file',
+                    img_data,
+                    filename=file_name,
+                    content_type=self._get_upload_content_type(file_ext)
+                )
 
                 async with session.post(upload_url, params=params, headers=headers, data=form) as resp:
                     if resp.status != 200:
-                        logger.error(f"CloudFlare-ImgBed 上传失败，状态码: {resp.status}")
+                        error_text = await resp.text()
+                        logger.error(f"CloudFlare-ImgBed 上传失败，状态码: {resp.status}，响应: {error_text[:500]}")
                         return None
 
                     # 解析响应: [{"src": "/file/abc123.jpg"}]
